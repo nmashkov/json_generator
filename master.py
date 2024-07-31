@@ -18,9 +18,6 @@ class App:
         self.mapping = ''
         self.main_df = ''
         self.logs_name = str(input('\nWrite logs name:\n'))
-        # results settings
-        self.results_file = 'cs_load.json'
-        self.results_dir = (f'{WORKING_DIR}/{self.results_file}')
         
     def pause(self):
         return input("Press the <ENTER> key to exit...")
@@ -141,7 +138,18 @@ class App:
             test_flow_entity_lst.append(flow_template)
         
         # print json to file
-        with open(self.results_dir, mode="w", encoding="utf-8") as write_file:
+        print('=PRINT RESULT=')
+        
+        # define name for json
+        map_extr = self.mapping.split('.')
+            
+        results_file = str(map_extr[0])
+
+        results_dir = (f'{WORKING_DIR}/{results_file}_load.json')
+        
+        print(f'results_dir: {results_dir}')
+        
+        with open(results_dir, mode="w", encoding="utf-8") as write_file:
             json.dump(main_json_template, write_file, ensure_ascii=False)
             
         print('=DONE=')
