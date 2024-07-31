@@ -14,6 +14,7 @@ WORKING_DIR = f'{BASE_DIR}/{TARGET_DIR}'
 class App:
     def __init__(self):
         self.dir_list = os.listdir(WORKING_DIR)
+        self.mapping_dict = {}
         self.mapping = ''
         self.main_df = ''
         self.logs_name = str(input('\nWrite logs name:\n'))
@@ -28,20 +29,30 @@ class App:
         
         print('=PARSING=')
         
+        i = 1
+        
         for file in self.dir_list:
             if file.endswith(".xlsx"):
-                self.mapping = file
+                self.mapping_dict[i] = file
+                i += 1
 
     def make_df(self):
         
         print('=MAKING DF=')
         
-        if not self.mapping:
+        if not self.mapping_dict:
             print('\n==================================================')
             print(f'{"!В папке отсутствует mapping файл!":^50}')
             print('==================================================')
             self.pause()
             exit()
+        
+        for key in self.mapping_dict.keys():
+            print(key,': ', self.mapping_dict[key])
+            
+        mapping_key = input('\nWrite mapping number:\n')
+
+        self.mapping = self.mapping_dict[int(mapping_key)]
         
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
