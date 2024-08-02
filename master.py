@@ -18,6 +18,7 @@ class App:
         self.mapping = ''
         self.main_df = ''
         self.logs_name = str(input('\nWrite logs name:\n'))
+        self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\n'))
         
     def pause(self):
         return input("Press the <ENTER> key to exit...")
@@ -54,16 +55,19 @@ class App:
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
                                sheet_name='Mapping',
-                               usecols="D,T:V,Z")
+                               usecols="D,T:V,Z,AA")
         except Exception as e:
             print(e)
             self.pause()
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'SchemaT', 'Table', 'Code', 'Data Type']
+        main_df.columns = ['SchemaS', 'SchemaT', 'Table', 'Code', 'Data Type',
+                           'Length']
 
         main_df = main_df[main_df['Code']!='hdp_processed_dttm']
+        
+        main_df = main_df.fillna('')
 
         main_df = main_df.sort_values(['Table'])
 
@@ -76,7 +80,13 @@ class App:
     def generate_json(self):
         
         print('=GENERATING JSON=')
-        
+
+        # check db type
+        if self.db_type not in (1,2):
+            print('=DB CHOOSE ERROR=')
+            print(f"db_type: {self.db_type}")
+            self.pause()
+            exit()
         #
         schema_t = self.main_df.iloc[0]['SchemaT']
         print(f'schema_t: {schema_t}')
@@ -103,41 +113,92 @@ class App:
         print(f"number of tables: {len(tables_lst)}")
         print(tables_lst)
         
-        # generate flows
-        for table in tables_lst:
-            columns = []
-            columns_casts = []
+        if self.db_type == 1:  # Oracle
+            # generate oracle flows
+            print('=MAKING ORACLE FLOWS=')
             
-            current_table = self.main_df[self.main_df['Table']==table]
-            
-            schema_s = current_table.iloc[0]['SchemaS']
-            
-            for _, row in current_table.iterrows():
-                columns.append(row['Code'])
-                columns_casts.append(
-                    {
-                        "name": row['Code'],
-                        "colType": row['Data Type']
+            for table in tables_lst:
+                columns = []
+                columns_casts = []
+                
+                current_table = self.main_df[self.main_df['Table']==table]
+                
+                schema_s = current_table.iloc[0]['SchemaS']
+                
+                for _, row in current_table.iterrows():
+                    columns.append(row['Code'])
+                    columns_casts.append(
+                        {
+                            "name": row['Code'],
+                            "colType": row['Data Type']
+                        }
+                    )
+
+                flow_template = {
+                    "loadType": "Scd1Replace",
+                    "source": {
+                        "schema": schema_s,
+                        "table": table,
+                        "columns": columns,
+                        "columnCasts": columns_casts,
+                        "jdbcDialect": "..."
+                    },
+                    "target": {
+                        "table": table
                     }
-                )
-
-            flow_template = {
-                "loadType": "Scd1Replace",
-                "source": {
-                    "schema": schema_s,
-                    "table": table,
-                    "columns": columns,
-                    "columnCasts": columns_casts,
-                    "jdbcDialect": "..."
-                },
-                "target": {
-                    "table": table
                 }
-            }
 
-            test_flow_entity_lst.append(flow_template)
+                test_flow_entity_lst.append(flow_template)
+
+        elif self.db_type == 2:  # MSSQL
+            # generate mssql flows
+            print('=MAKING MSSQL FLOWS=')
+            
+            for table in tables_lst:
+                
+                current_table = self.main_df[self.main_df['Table']==table]
+                
+                schema_s = current_table.iloc[0]['SchemaS']
+                
+                query_full = ''
+                query_prefix = 'select '
+                query_suffix = ' from $schema.$table'
+                query_cast_list = []
+
+                for _, row in current_table.iterrows():
+                    attr = row['Code']
+                    typ = row['Data Type']
+                    length = ''
+                    if row['Length'] and row['Data Type'] not in ('smallint',
+                                                                  'date',
+                                                                  'int',
+                                                                  'integer'):
+                        length = f"({row['Length']})"
+                    else:
+                        length = ''
+                    query_cast_list.append(
+                        f"cast([{attr}] as {typ}{length} ) as '{attr}'"
+                        )
+
+                query_full = ', '.join(query_cast_list)
+
+                query_full = query_prefix + query_full + query_suffix
+
+                flow_template = {
+                    "loadType": "Scd1Replace",
+                    "source": {
+                        "schema": schema_s,
+                        "table": table,
+                        "query": query_full
+                    },
+                    "target": {
+                        "table": table
+                    }
+                }
+
+                test_flow_entity_lst.append(flow_template)
         
-        # print json to file
+        # print result to file
         print('=PRINT RESULT=')
         
         # define name for json
