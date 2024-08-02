@@ -169,10 +169,11 @@ class App:
                     attr = row['Code']
                     typ = row['Data Type']
                     length = ''
-                    if row['Length'] and row['Data Type'] not in ('smallint',
-                                                                  'date',
-                                                                  'int',
-                                                                  'integer'):
+                    if row['Length'] and\
+                        row['Data Type'].lower() not in ('smallint',
+                                                         'date',
+                                                         'int',
+                                                         'integer'):
                         length = f"({row['Length']})"
                     else:
                         length = ''
