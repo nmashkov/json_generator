@@ -17,7 +17,6 @@ class App:
         self.mapping_dict = {}
         self.mapping = ''
         self.main_df = ''
-        self.logs_name = str(input('\nWrite logs name:\n'))
         self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\n'))
         
     def pause(self):
@@ -55,21 +54,23 @@ class App:
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
                                sheet_name='Mapping',
-                               usecols="D,T:V,Z,AA")
+                               usecols="D,E,G,I,J,T")
         except Exception as e:
             print(e)
             self.pause()
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'SchemaT', 'Table', 'Code', 'Data Type',
-                           'Length']
+        main_df.columns = ['SchemaS', 'Table', 'Code', 'Data Type',
+                           'Length', 'SchemaT']
 
         main_df = main_df[main_df['Code']!='hdp_processed_dttm']
         
         main_df = main_df.fillna('')
 
         main_df = main_df.sort_values(['Table'])
+
+        main_df = main_df[main_df['Table']!='']
 
         main_df.index = range(1, len(main_df) + 1)
         
@@ -103,7 +104,7 @@ class App:
             "commonInfo": {
                 "targetSchema": schema_t,
                 "etlSchema": schema_t,
-                "logsTable": self.logs_name
+                "logsTable": "logs..."
             },
             "flows": test_flow_entity_lst
             }
