@@ -142,7 +142,7 @@ class App:
                         "table": table,
                         "columns": columns,
                         "columnCasts": columns_casts,
-                        "jdbcDialect": "..."
+                        "jdbcDialect": "OracleDialect"
                     },
                     "target": {
                         "table": table
