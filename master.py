@@ -43,13 +43,17 @@ class App:
             print('==================================================')
             self.pause()
             exit()
-        
-        for key in self.mapping_dict.keys():
-            print(key,': ', self.mapping_dict[key])
-            
-        mapping_key = input('\nWrite mapping number:\n')
+        elif len(self.mapping_dict) == 1:
+            self.mapping = next(iter(self.mapping_dict.values()))
+        elif len(self.mapping_dict) > 1:
+            for key in self.mapping_dict.keys():
+                print(key,': ', self.mapping_dict[key])
+                
+            mapping_key = input('\nWrite mapping number:\n')
 
-        self.mapping = self.mapping_dict[int(mapping_key)]
+            self.mapping = self.mapping_dict[int(mapping_key)]
+
+        print(f"mapping: {self.mapping}")
         
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
@@ -119,36 +123,49 @@ class App:
             print('=MAKING ORACLE FLOWS=')
             
             for table in tables_lst:
-                columns = []
-                columns_casts = []
-                
+
                 current_table = self.main_df[self.main_df['Table']==table]
                 
                 schema_s = current_table.iloc[0]['SchemaS']
                 
+                query_full = ''
+                query_prefix = 'select '
+                query_suffix = ' from $schema.$table'
+                query_cast_list = []
+
                 for _, row in current_table.iterrows():
-                    columns.append(row['Code'])
-                    columns_casts.append(
-                        {
-                            "name": row['Code'],
-                            "colType": row['Data Type']
-                        }
-                    )
+                    attr = row['Code']
+                    typ = row['Data Type']
+                    length = ''
+                    if row['Length'] and\
+                        row['Data Type'].lower() not in ('smallint',
+                                                         'date',
+                                                         'int',
+                                                         'integer'):
+                        length = f"({row['Length']})"
+                    else:
+                        length = ''
+                    query_cast_list.append(
+                        f"cast('[{attr}]' as {typ}{length} ) as '{attr}'"
+                        )
+
+                query_full = ', '.join(query_cast_list)
+
+                query_full = query_prefix + query_full + query_suffix
 
                 flow_template = {
                     "loadType": "Scd1Replace",
                     "source": {
                         "schema": schema_s,
                         "table": table,
-                        "columns": columns,
-                        "columnCasts": columns_casts,
+                        "query": query_full,
                         "jdbcDialect": "OracleDialect"
                     },
                     "target": {
                         "table": table
                     }
                 }
-
+                
                 test_flow_entity_lst.append(flow_template)
 
         elif self.db_type == 2:  # MSSQL
