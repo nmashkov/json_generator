@@ -17,6 +17,7 @@ class App:
         self.mapping_dict = {}
         self.mapping = ''
         self.main_df = ''
+        self.enc = 'utf-8'
         self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\n'))
         
     def pause(self):
@@ -184,7 +185,13 @@ class App:
                 query_cast_list = []
 
                 for _, row in current_table.iterrows():
-                    attr = row['Code']
+                    attr_f = row['Code']
+                    if attr_f.lower() in (
+                        'username', 'group', 'name', 'surname', 'course'
+                        ):
+                        attr_l = f"[{row['Code']}]"
+                    else:
+                        attr_l = row['Code']
                     typ = row['Data Type']
                     length = ''
                     if row['Length'] and\
@@ -196,7 +203,7 @@ class App:
                     else:
                         length = ''
                     query_cast_list.append(
-                        f"cast([{attr}] as {typ}{length} ) as '{attr}'"
+                        f"cast('{attr_f}' as {typ}{length} ) as '{attr_l}'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -229,7 +236,7 @@ class App:
         
         print(f'results_dir: {results_dir}')
         
-        with open(results_dir, mode="w", encoding="utf-8") as write_file:
+        with open(results_dir, mode="w", encoding=self.enc) as write_file:
             json.dump(main_json_template, write_file, ensure_ascii=False)
             
         print('=DONE=')
