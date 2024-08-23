@@ -70,12 +70,14 @@ class App:
                            'Length', 'SchemaT']
 
         main_df = main_df[main_df['Code']!='hdp_processed_dttm']
+
+        main_df = main_df[main_df['Table'].notnull()]
+
+        main_df['schemaS.table'] = main_df['SchemaS'] + '.' + main_df['Table']
         
         main_df = main_df.fillna('')
 
         main_df = main_df.sort_values(['Table'])
-
-        main_df = main_df[main_df['Table']!='']
 
         main_df.index = range(1, len(main_df) + 1)
         
@@ -98,43 +100,35 @@ class App:
         print(f'schema_t: {schema_t}')
         test_flow_entity_lst = []
         
-        main_json_template = {
-            "connection": {
-                "connType": "jdbc",
-                "url": "...",
-                "driver": "...",
-                "user": "...",
-                "password": "..."
-            },
-            "commonInfo": {
-                "targetSchema": schema_t,
-                "etlSchema": schema_t,
-                "logsTable": "logs..."
-            },
-            "flows": test_flow_entity_lst
-            }
-        
-        # get tables from mapping
-        tables_lst = self.main_df['Table'].unique()
-        print(f"number of tables: {len(tables_lst)}")
-        print(tables_lst)
-        
+        # get schemaS.tables from mapping
+        schemaS_table_lst = self.main_df['schemaS.table'].unique()
+        schtbl_len = len(schemaS_table_lst)
+        print(f"number of schemaS.tables: {schtbl_len}")
+        print(schemaS_table_lst)
+
+        schtbl_cnt_trigger = 0
+        schtbl_cnt_max = 199
+        schtbl_num = 1
+
         if self.db_type == 1:  # Oracle
             # generate oracle flows
             print('=MAKING ORACLE FLOWS=')
             
-            for table in tables_lst:
+            for schema_table in schemaS_table_lst:
 
-                current_table = self.main_df[self.main_df['Table']==table]
-                
-                schema_s = current_table.iloc[0]['SchemaS']
+                current_df = self.main_df[
+                    self.main_df['schemaS.table']==schema_table
+                    ]
+
+                schema_s = current_df.iloc[0]['SchemaS']
+                table = current_df.iloc[0]['Table']
                 
                 query_full = ''
                 query_prefix = 'select '
                 query_suffix = ' from $schema.$table'
                 query_cast_list = []
 
-                for _, row in current_table.iterrows():
+                for _, row in current_df.iterrows():
                     attr = row['Code']
                     typ = row['Data Type']
                     length = ''
@@ -147,7 +141,7 @@ class App:
                     else:
                         length = ''
                     query_cast_list.append(
-                        f"cast('[{attr}]' as {typ}{length} ) as '{attr}'"
+                        f'cast("{attr}" as {typ}{length} ) as "{attr}"'
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -167,43 +161,66 @@ class App:
                     }
                 }
                 
-                test_flow_entity_lst.append(flow_template)
+                if schtbl_cnt_trigger < schtbl_cnt_max:
+
+                    schtbl_cnt_trigger += 1
+
+                    test_flow_entity_lst.append(flow_template)
+                
+                else:
+                    
+                    schtbl_cnt_trigger = 0
+
+                    test_flow_entity_lst.append(flow_template)
+
+                    self.print_results(schema_t,
+                                       test_flow_entity_lst,
+                                       schtbl_num)
+                    
+                    schtbl_num += 1
+
+                    test_flow_entity_lst = []
 
         elif self.db_type == 2:  # MSSQL
             # generate mssql flows
             print('=MAKING MSSQL FLOWS=')
             
-            for table in tables_lst:
-                
-                current_table = self.main_df[self.main_df['Table']==table]
-                
-                schema_s = current_table.iloc[0]['SchemaS']
+            for schema_table in schemaS_table_lst:
+
+                current_df = self.main_df[
+                    self.main_df['schemaS.table']==schema_table
+                    ]
+
+                schema_s = current_df.iloc[0]['SchemaS']
+                table = current_df.iloc[0]['Table']
                 
                 query_full = ''
                 query_prefix = 'select '
                 query_suffix = ' from $schema.$table'
                 query_cast_list = []
 
-                for _, row in current_table.iterrows():
+                for _, row in current_df.iterrows():
                     attr_f = row['Code']
-                    if attr_f.lower() in (
-                        'username', 'group', 'name', 'surname', 'course'
-                        ):
-                        attr_l = f"[{row['Code']}]"
-                    else:
-                        attr_l = row['Code']
+                    # if attr_f.lower() in (
+                    #     'user', 'username', 'group',
+                    #     'name', 'surname', 'course'
+                    #     ):
+                    #     attr_l = f"[{row['Code']}]"
+                    # else:
+                    #     attr_l = row['Code']
+                    attr_l = row['Code']
                     typ = row['Data Type']
                     length = ''
                     if row['Length'] and\
                         row['Data Type'].lower() not in ('smallint',
-                                                         'date',
-                                                         'int',
-                                                         'integer'):
+                                                        'date',
+                                                        'int',
+                                                        'integer'):
                         length = f"({row['Length']})"
                     else:
                         length = ''
                     query_cast_list.append(
-                        f"cast('{attr_f}' as {typ}{length} ) as '{attr_l}'"
+                        f"cast('[{attr_f}]' as {typ}{length} ) as '[{attr_l}]'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -222,17 +239,66 @@ class App:
                     }
                 }
 
-                test_flow_entity_lst.append(flow_template)
-        
+                if schtbl_cnt_trigger < schtbl_cnt_max:
+
+                    schtbl_cnt_trigger += 1
+
+                    test_flow_entity_lst.append(flow_template)
+                
+                else:
+                    
+                    schtbl_cnt_trigger = 0
+
+                    test_flow_entity_lst.append(flow_template)
+
+                    self.print_results(schema_t,
+                                       test_flow_entity_lst,
+                                       schtbl_num)
+                    
+                    schtbl_num += 1
+
+                    test_flow_entity_lst = []
+
+        # for last part of batch
+        if schtbl_cnt_trigger <= schtbl_len and schtbl_num > 1:
+            self.print_results(schema_t,
+                                test_flow_entity_lst,
+                                schtbl_num)
+        # if mapping table count less than 200
+        if schtbl_cnt_trigger <= schtbl_len and schtbl_num == 1:
+            schtbl_num = f'max_{schtbl_len}'
+            self.print_results(schema_t,
+                                test_flow_entity_lst,
+                                schtbl_num)
+    
+    def print_results(self, schema_t, test_flow_entity_lst, schtbl_num):
         # print result to file
         print('=PRINT RESULT=')
+
+        main_json_template = {
+            "connection": {
+                "connType": "jdbc",
+                "url": "...",
+                "driver": "...",
+                "user": "...",
+                "password": "..."
+            },
+            "commonInfo": {
+                "targetSchema": schema_t,
+                "etlSchema": schema_t,
+                "logsTable": "logs..."
+            },
+            "flows": test_flow_entity_lst
+            }
         
         # define name for json
         map_extr = self.mapping.split('.')
             
         results_file = str(map_extr[0])
 
-        results_dir = (f'{WORKING_DIR}/{results_file}_load.json')
+        results_dir = (
+            f'{WORKING_DIR}/{results_file}_{str(schtbl_num)}_load.json'
+            )
         
         print(f'results_dir: {results_dir}')
         
