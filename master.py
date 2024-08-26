@@ -141,7 +141,7 @@ class App:
                     else:
                         length = ''
                     query_cast_list.append(
-                        f'cast("{attr}" as {typ}{length} ) as "{attr}"'
+                        f"cast('{attr}' as {typ}{length} ) as '{attr}'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -262,14 +262,14 @@ class App:
         # for last part of batch
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num > 1:
             self.print_results(schema_t,
-                                test_flow_entity_lst,
-                                schtbl_num)
+                               test_flow_entity_lst,
+                               schtbl_num)
         # if mapping table count less than 200
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num == 1:
             schtbl_num = f'max_{schtbl_len}'
             self.print_results(schema_t,
-                                test_flow_entity_lst,
-                                schtbl_num)
+                               test_flow_entity_lst,
+                               schtbl_num)
     
     def print_results(self, schema_t, test_flow_entity_lst, schtbl_num):
         # print result to file
