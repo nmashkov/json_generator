@@ -19,9 +19,23 @@ class App:
         self.main_df = ''
         self.enc = 'utf-8'
         self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\n'))
-        
+        self.oracle_cblob_ignore = 0
+    
+    def chech_bg_type_and_cblob_ignore(self):
+        # check db type
+        if self.db_type not in (1,2):
+            print('=DB CHOOSE ERROR=')
+            print(f"db_type: {self.db_type}")
+            self.pause()
+            exit()
+        #
+        if self.db_type == 1:
+            self.oracle_cblob_ignore = int(input(
+                '\nIgnore CLOB/BLOB attributes for Oracle?:\n1: Yes\n2: No\n'
+                ))
+
     def pause(self):
-        return input("Press the <ENTER> key to exit...")
+        return input("\nPress the <ENTER> key to exit...")
 
     def parse_directory(self):
         
@@ -59,19 +73,23 @@ class App:
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
                                sheet_name='Mapping',
-                               usecols="D,E,G,I,J,T")
+                               usecols="D,E,I,J,T,V")
         except Exception as e:
             print(e)
             self.pause()
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'Table', 'Code', 'Data Type',
-                           'Length', 'SchemaT']
+        main_df.columns = ['SchemaS', 'Table', 'Data Type',
+                           'Length', 'SchemaT', 'Code']
+
+        main_df = main_df[main_df['Table'].notnull()]
 
         main_df = main_df[main_df['Code']!='hdp_processed_dttm']
 
-        main_df = main_df[main_df['Table'].notnull()]
+        if self.oracle_cblob_ignore == 1:
+            main_df = main_df[main_df['Data Type']!='CLOB']
+            main_df = main_df[main_df['Data Type']!='BLOB']
 
         main_df['schemaS.table'] = main_df['SchemaS'] + '.' + main_df['Table']
         
@@ -89,13 +107,6 @@ class App:
         
         print('=GENERATING JSON=')
 
-        # check db type
-        if self.db_type not in (1,2):
-            print('=DB CHOOSE ERROR=')
-            print(f"db_type: {self.db_type}")
-            self.pause()
-            exit()
-        #
         schema_t = self.main_df.iloc[0]['SchemaT']
         print(f'schema_t: {schema_t}')
         test_flow_entity_lst = []
@@ -308,6 +319,9 @@ class App:
         print('=DONE=')
 
     def run(self):
+        #
+        self.chech_bg_type_and_cblob_ignore()
+        #
         self.parse_directory()
         #
         print(f'WORKING_DIR: {WORKING_DIR}')
