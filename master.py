@@ -15,13 +15,13 @@ class App:
     def __init__(self):
         self.dir_list = os.listdir(WORKING_DIR)
         self.mapping_dict = {}
-        self.mapping = ''
+        self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\n'))
-        self.oracle_cblob_ignore = 0
+        self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choise: '))
+        self.oracle_cblob_is_gnore = 0
     
-    def chech_bg_type_and_cblob_ignore(self):
+    def check_db_type_and_cblob_ignore(self):
         # check db type
         if self.db_type not in (1,2):
             print('=DB CHOOSE ERROR=')
@@ -30,9 +30,10 @@ class App:
             exit()
         #
         if self.db_type == 1:
-            self.oracle_cblob_ignore = int(input(
-                '\nIgnore CLOB/BLOB attributes for Oracle?:\n1: Yes\n2: No\n'
-                ))
+            # self.oracle_cblob_is_gnore = int(input(
+            #     '\nIgnore CLOB/BLOB attributes for Oracle?:\n1: Yes\n2: No\n'
+            # ))
+            self.oracle_cblob_is_gnore = 1  # Проще один раз пересобрать exe, чем каждый раз вводить
 
     def pause(self):
         return input("\nPress the <ENTER> key to exit...")
@@ -40,13 +41,10 @@ class App:
     def parse_directory(self):
         
         print('=PARSING=')
-        
-        i = 1
-        
-        for file in self.dir_list:
-            if file.endswith(".xlsx"):
-                self.mapping_dict[i] = file
-                i += 1
+
+        filtered_files = [filename for filename in self.dir_list if filename.endswith('.xlsx')]
+
+        self.mapping_dict = {number + 1: filename for number, filename in enumerate(filtered_files)}
 
     def make_df(self):
         
@@ -54,48 +52,56 @@ class App:
         
         if not self.mapping_dict:
             print('\n==================================================')
-            print(f'{"!В папке отсутствует mapping файл!":^50}')
+            print(f'{"!В папке отсутствует mapping файл формата xlsx!":^50}')
             print('==================================================')
             self.pause()
             exit()
         elif len(self.mapping_dict) == 1:
-            self.mapping = next(iter(self.mapping_dict.values()))
+            self.mapping_filename = next(iter(self.mapping_dict.values()))
         elif len(self.mapping_dict) > 1:
             for key in self.mapping_dict.keys():
                 print(key,': ', self.mapping_dict[key])
                 
-            mapping_key = input('\nWrite mapping number:\n')
+            mapping_key = input('\nWrite mapping number: ')
 
-            self.mapping = self.mapping_dict[int(mapping_key)]
+            self.mapping_filename = self.mapping_dict[int(mapping_key)]
 
-        print(f"mapping: {self.mapping}")
         
         try:
-            main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
-                               sheet_name='Mapping',
-                               usecols="D,I,J,T,U,V")
+            print("Reading mapping file...")
+            main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping_filename}',
+                                    sheet_name='Mapping',
+                                    usecols="D,"  # Source Schema
+                                            "E,"  # Source Table
+                                            "G,"  # Source Code
+                                            "I,"  # Source Data Type
+                                            "J,"  # Source Length
+                                            "T,"  # Target Schema
+                                            "U,"  # Tagret Table
+                                            "V")  # Target Code
+
         except Exception as e:
-            print(e)
+            print("Error while reading file: ", e)
             self.pause()
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'Data Type',
+        main_df.columns = ['SchemaS', 'TableS', 'CodeS', 'Data Type',
                            'Length', 'SchemaT', 'Table', 'Code']
 
         main_df = main_df[main_df['Table'].notnull()]
 
         main_df = main_df[main_df['Code']!='hdp_processed_dttm']
 
-        if self.oracle_cblob_ignore == 1:
+        if self.oracle_cblob_is_gnore:
             main_df = main_df[main_df['Data Type']!='CLOB']
             main_df = main_df[main_df['Data Type']!='BLOB']
 
-        main_df['schemaS.table'] = main_df['SchemaS'] + '.' + main_df['Table']
+        main_df['schemaS.tableS'] = main_df['SchemaS'] + '.' + main_df['TableS']
         
         main_df = main_df.fillna('')
 
-        main_df = main_df.sort_values(['Table'])
+        main_df = main_df.sort_values(['TableS'])
 
         main_df.index = range(1, len(main_df) + 1)
         
@@ -108,14 +114,13 @@ class App:
         print('=GENERATING JSON=')
 
         schema_t = self.main_df.iloc[0]['SchemaT']
-        print(f'schema_t: {schema_t}')
+        print(f'Target Schema: {schema_t}')
         test_flow_entity_lst = []
         
         # get schemaS.tables from mapping
-        schemaS_table_lst = self.main_df['schemaS.table'].unique()
-        schtbl_len = len(schemaS_table_lst)
-        print(f"number of schemaS.tables: {schtbl_len}")
-        print(schemaS_table_lst)
+        schemaS_tableS_lst = self.main_df['schemaS.tableS'].unique()
+        schtbl_len = len(schemaS_tableS_lst)
+        print(f"Number of source schema.tables: {schtbl_len}")
 
         schtbl_cnt_trigger = 0
         schtbl_cnt_max = 199
@@ -125,14 +130,15 @@ class App:
             # generate oracle flows
             print('=MAKING ORACLE FLOWS=')
             
-            for schema_table in schemaS_table_lst:
+            for schema_table in schemaS_tableS_lst:
 
                 current_df = self.main_df[
-                    self.main_df['schemaS.table']==schema_table
+                    self.main_df['schemaS.tableS'] == schema_table
                     ]
 
                 schema_s = current_df.iloc[0]['SchemaS']
-                table = current_df.iloc[0]['Table']
+                source_table = current_df.iloc[0]['TableS']
+                target_table = current_df.iloc[0]['Table']
                 
                 query_full = ''
                 query_prefix = 'select '
@@ -140,19 +146,22 @@ class App:
                 query_cast_list = []
 
                 for _, row in current_df.iterrows():
-                    attr = row['Code']
-                    typ = row['Data Type']
-                    length = ''
+                    target_column_name = row['Code']
+                    source_column_name = row['CodeS']
+                    source_column_type = row['Data Type']
+                    source_column_length = ''
                     if row['Length'] and\
                         row['Data Type'].lower() not in ('smallint',
                                                          'date',
                                                          'int',
                                                          'integer'):
-                        length = f"({row['Length']})"
+                        source_column_length = f"({row['Length']})"
+                    elif row['Data Type'].lower() == 'varchar2':
+                        source_column_length = '(255)'
                     else:
-                        length = ''
+                        source_column_length = ''
                     query_cast_list.append(
-                        f"cast('{attr}' as {typ}{length} ) as '{attr}'"
+                        f"cast('{source_column_name}' as {source_column_type}{source_column_length} ) as '{target_column_name}'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -163,12 +172,12 @@ class App:
                     "loadType": "Scd1Replace",
                     "source": {
                         "schema": schema_s,
-                        "table": table,
+                        "table": source_table,
                         "query": query_full,
                         "jdbcDialect": "OracleDialect"
                     },
                     "target": {
-                        "table": table
+                        "table": target_table
                     }
                 }
                 
@@ -196,10 +205,10 @@ class App:
             # generate mssql flows
             print('=MAKING MSSQL FLOWS=')
             
-            for schema_table in schemaS_table_lst:
+            for schema_table in schemaS_tableS_lst:
 
                 current_df = self.main_df[
-                    self.main_df['schemaS.table']==schema_table
+                    self.main_df['schemaS.tableS'] == schema_table
                     ]
 
                 schema_s = current_df.iloc[0]['SchemaS']
@@ -212,26 +221,19 @@ class App:
 
                 for _, row in current_df.iterrows():
                     attr_f = row['Code']
-                    # if attr_f.lower() in (
-                    #     'user', 'username', 'group',
-                    #     'name', 'surname', 'course'
-                    #     ):
-                    #     attr_l = f"[{row['Code']}]"
-                    # else:
-                    #     attr_l = row['Code']
                     attr_l = row['Code']
-                    typ = row['Data Type']
-                    length = ''
+                    source_column_type = row['Data Type']
+                    source_column_length = ''
                     if row['Length'] and\
                         row['Data Type'].lower() not in ('smallint',
                                                         'date',
                                                         'int',
                                                         'integer'):
-                        length = f"({row['Length']})"
+                        source_column_length = f"({row['Length']})"
                     else:
-                        length = ''
+                        source_column_length = ''
                     query_cast_list.append(
-                        f"cast('[{attr_f}]' as {typ}{length} ) as '[{attr_l}]'"
+                        f"cast('[{attr_f}]' as {source_column_type}{source_column_length} ) as '[{attr_l}]'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -303,9 +305,8 @@ class App:
             }
         
         # define name for json
-        map_extr = self.mapping.split('.')
             
-        results_file = str(map_extr[0])
+        results_file = str(self.mapping_filename.split('.')[0])
 
         results_dir = (
             f'{WORKING_DIR}/{results_file}_{str(schtbl_num)}_load.json'
@@ -320,13 +321,13 @@ class App:
 
     def run(self):
         #
-        self.chech_bg_type_and_cblob_ignore()
+        self.check_db_type_and_cblob_ignore()
         #
         self.parse_directory()
         #
         print(f'WORKING_DIR: {WORKING_DIR}')
         print(f'dir_list: {self.dir_list}')
-        print(f'mapping: {self.mapping}')
+        print(f'Selected mapping: {self.mapping_filename}')
         #
         self.make_df()
         self.generate_json()
