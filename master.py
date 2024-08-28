@@ -73,15 +73,15 @@ class App:
         try:
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping}',
                                sheet_name='Mapping',
-                               usecols="D,E,I,J,T,V")
+                               usecols="D,I,J,T,U,V")
         except Exception as e:
             print(e)
             self.pause()
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'Table', 'Data Type',
-                           'Length', 'SchemaT', 'Code']
+        main_df.columns = ['SchemaS', 'Data Type',
+                           'Length', 'SchemaT', 'Table', 'Code']
 
         main_df = main_df[main_df['Table'].notnull()]
 
