@@ -18,8 +18,10 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = int(input('\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choise: '))
-        self.oracle_cblob_is_gnore = 0
+        self.db_type = int(input(
+            '\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choice: '
+            ))
+        self.oracle_cblob_is_ignore = 0
     
     def check_db_type_and_cblob_ignore(self):
         # check db type
@@ -30,10 +32,10 @@ class App:
             exit()
         #
         if self.db_type == 1:
-            # self.oracle_cblob_is_gnore = int(input(
+            # self.oracle_cblob_is_ignore = int(input(
             #     '\nIgnore CLOB/BLOB attributes for Oracle?:\n1: Yes\n2: No\n'
             # ))
-            self.oracle_cblob_is_gnore = 1  # Проще один раз пересобрать exe, чем каждый раз вводить
+            self.oracle_cblob_is_ignore = 1
 
     def pause(self):
         return input("\nPress the <ENTER> key to exit...")
@@ -87,13 +89,13 @@ class App:
         main_df = main_df.drop(0,axis=0)
 
         main_df.columns = ['SchemaS', 'TableS', 'CodeS', 'Data Type',
-                           'Length', 'SchemaT', 'Table', 'Code']
+                           'Length', 'SchemaT', 'TableT', 'CodeT']
 
-        main_df = main_df[main_df['Table'].notnull()]
+        main_df = main_df[main_df['TableT'].notnull()]
 
-        main_df = main_df[main_df['Code']!='hdp_processed_dttm']
+        main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
 
-        if self.oracle_cblob_is_gnore:
+        if self.oracle_cblob_is_ignore:
             main_df = main_df[main_df['Data Type']!='CLOB']
             main_df = main_df[main_df['Data Type']!='BLOB']
 
@@ -138,7 +140,7 @@ class App:
 
                 schema_s = current_df.iloc[0]['SchemaS']
                 source_table = current_df.iloc[0]['TableS']
-                target_table = current_df.iloc[0]['Table']
+                target_table = current_df.iloc[0]['TableT']
                 
                 query_full = ''
                 query_prefix = 'select '
@@ -146,7 +148,7 @@ class App:
                 query_cast_list = []
 
                 for _, row in current_df.iterrows():
-                    target_column_name = row['Code']
+                    target_column_name = row['CodeT']
                     source_column_name = row['CodeS']
                     source_column_type = row['Data Type']
                     source_column_length = ''
@@ -161,7 +163,9 @@ class App:
                     else:
                         source_column_length = ''
                     query_cast_list.append(
-                        f"cast('{source_column_name}' as {source_column_type}{source_column_length} ) as '{target_column_name}'"
+                        f"cast('{source_column_name}' as "
+                        f"{source_column_type}{source_column_length}) as "
+                        f"'{target_column_name}'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -212,7 +216,7 @@ class App:
                     ]
 
                 schema_s = current_df.iloc[0]['SchemaS']
-                table = current_df.iloc[0]['Table']
+                table = current_df.iloc[0]['TableT']
                 
                 query_full = ''
                 query_prefix = 'select '
@@ -220,8 +224,8 @@ class App:
                 query_cast_list = []
 
                 for _, row in current_df.iterrows():
-                    attr_f = row['Code']
-                    attr_l = row['Code']
+                    attr_f = row['CodeT']
+                    attr_l = row['CodeT']
                     source_column_type = row['Data Type']
                     source_column_length = ''
                     if row['Length'] and\
@@ -233,7 +237,9 @@ class App:
                     else:
                         source_column_length = ''
                     query_cast_list.append(
-                        f"cast('[{attr_f}]' as {source_column_type}{source_column_length} ) as '[{attr_l}]'"
+                        f"cast('[{attr_f}]' as "
+                        f"{source_column_type}{source_column_length} ) as "
+                        f"'[{attr_l}]'"
                         )
 
                 query_full = ', '.join(query_cast_list)
