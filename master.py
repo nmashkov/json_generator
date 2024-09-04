@@ -21,7 +21,8 @@ class App:
         self.db_type = int(input(
             '\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choice: '
             ))
-        self.oracle_cblob_is_ignore = 0
+        self.IsCBlobTableIgnore = 1
+        self.IsCBlobColumnIgnore = 0
     
     def check_db_type_and_cblob_ignore(self):
         # check db type
@@ -31,11 +32,18 @@ class App:
             self.pause()
             exit()
         #
+        """
         if self.db_type == 1:
-            # self.oracle_cblob_is_ignore = int(input(
-            #     '\nIgnore CLOB/BLOB attributes for Oracle?:\n1: Yes\n2: No\n'
-            # ))
-            self.oracle_cblob_is_ignore = 1
+            self.IsCBlobTableIgnore = int(input(
+                '\nIgnore tables with CLOB/BLOB attributes for Oracle?:'
+                '\n1: Yes\n2: No\n'
+            ))
+            if self.IsCBlobTableIgnore != 1:
+                self.IsCBlobColumnIgnore = int(input(
+                    '\nIgnore CLOB/BLOB attributes for Oracle?:'
+                    '\n1: Yes\n2: No\n'
+                ))
+        """
 
     def pause(self):
         return input("\nPress the <ENTER> key to exit...")
@@ -44,9 +52,15 @@ class App:
         
         print('=PARSING=')
 
-        filtered_files = [filename for filename in self.dir_list if filename.endswith('.xlsx')]
+        filtered_files = [
+            filename for filename in self.dir_list
+                if filename.endswith('.xlsx')
+            ]
 
-        self.mapping_dict = {number + 1: filename for number, filename in enumerate(filtered_files)}
+        self.mapping_dict = {
+            number + 1: filename for number, filename
+                in enumerate(filtered_files)
+            }
 
     def make_df(self):
         
@@ -81,7 +95,6 @@ class App:
                                             "T,"  # Target Schema
                                             "U,"  # Tagret Table
                                             "V")  # Target Code
-
         except Exception as e:
             print("Error while reading file: ", e)
             self.pause()
@@ -94,8 +107,18 @@ class App:
         main_df = main_df[main_df['TableT'].notnull()]
 
         main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
-
-        if self.oracle_cblob_is_ignore:
+        
+        if self.IsCBlobTableIgnore:
+            ignore_table_list = []
+            for _, row in main_df.iterrows():
+                        s_dt = row['Data Type']
+                        s_table = row['TableS']
+                        if s_dt in ('CLOB', 'BLOB'):
+                            ignore_table_list.append(s_table)
+            if ignore_table_list:
+                for table in ignore_table_list:
+                    main_df = main_df[main_df['TableS']!=table]
+        elif self.IsCBlobColumnIgnore:
             main_df = main_df[main_df['Data Type']!='CLOB']
             main_df = main_df[main_df['Data Type']!='BLOB']
 
@@ -125,7 +148,7 @@ class App:
         print(f"Number of source schema.tables: {schtbl_len}")
 
         schtbl_cnt_trigger = 0
-        schtbl_cnt_max = 0
+        schtbl_cnt_max = 99
         schtbl_num = 1
 
         if self.db_type == 1:  # Oracle
