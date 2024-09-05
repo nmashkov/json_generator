@@ -104,7 +104,9 @@ class App:
         main_df.columns = ['SchemaS', 'TableS', 'CodeS', 'Data Type',
                            'Length', 'SchemaT', 'TableT', 'CodeT']
 
-        main_df = main_df[main_df['TableT'].notnull()]
+        # main_df = main_df[main_df['TableT'].notnull()]
+        
+        main_df['CodeT'] = main_df['CodeT'].apply(lambda x: str(x).strip())
 
         main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
         
@@ -119,8 +121,10 @@ class App:
                 for table in ignore_table_list:
                     main_df = main_df[main_df['TableS']!=table]
         elif self.IsCBlobColumnIgnore:
-            main_df = main_df[main_df['Data Type']!='CLOB']
-            main_df = main_df[main_df['Data Type']!='BLOB']
+            main_df = main_df[
+                    (main_df['Data Type']!='CLOB')
+                        and (main_df['Data Type']!='BLOB')
+                ]
 
         main_df['schemaS.tableS'] = main_df['SchemaS'] + '.' + main_df['TableS']
         
