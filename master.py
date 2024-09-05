@@ -321,7 +321,7 @@ class App:
         # print result to file
         print('=PRINT RESULT=')
 
-        main_json_template_556 = {
+        main_json_template = {
             "connection": {
                 "connType": "jdbc",
                 "url": "jdbc:oracle:thin:@192.168.1.67:1521:FREE",
@@ -332,12 +332,13 @@ class App:
             "commonInfo": {
                 "targetSchema": schema_t,
                 "etlSchema": schema_t,
-                "logsTable": "logs1251"
+                "logsTable": "logs556"
             },
             "flows": test_flow_entity_lst
             }
 
-        main_json_template = {
+        """
+        main_json_template_default = {
             "connection": {
                 "connType": "jdbc",
                 "url": "...",
@@ -352,12 +353,13 @@ class App:
             },
             "flows": test_flow_entity_lst
             }
+        """
         
         prefix = """spark-submit --master yarn --conf spark.master=yarn --conf spark.submit.deployMode=cluster --conf spark.yarn.maxAppAttempts=1 --conf spark.sql.broadcastTimeout=600 --conf spark.hadoop.hive.exec.dynamic.partition=true --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict --conf spark.driver.userClassPathFirst=true --conf spark.executor.userClassPathFirst=true --jars /home/hdoop/drivers/jcc-11.5.9.0.jar,/home/hdoop/drivers/commons-pool2-2.11.0.jar,/home/hdoop/drivers/delta-core_2.13-2.2.0.jar,/home/hdoop/drivers/delta-storage-2.2.0.jar,/home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar,/home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar,/home/hdoop/drivers/org.apache.servicemix.bundles.kafka-clients-2.4.1_1.jar,/home/hdoop/drivers/postgresql-42.3.1.jar,/home/hdoop/drivers/spark-sql-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/spark-token-provider-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/vertica-jdbc-11.1.0-0.jar,/home/hdoop/drivers/xdb6-18.3.0.0.jar,/home/hdoop/drivers/xmlparserv2-19.3.0.0.jar --class sparketl.Main /home/hdoop/SparkEtl_ora.jar ' """
 
         suffix = " '"
 
-        res_json = json.dumps(main_json_template_556)
+        res_json = json.dumps(main_json_template)
 
         json_core = res_json.replace('}}', '} }').replace('{{', '{ {')\
                             .replace('}]', '} ]').replace('[{', '[ {')\
