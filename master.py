@@ -18,13 +18,15 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = int(input(
-            '\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choice: '
-            ))
+        self.db_type = 0
         self.IsCBlobTableIgnore = 1
         self.IsCBlobColumnIgnore = 0
     
-    def check_db_type_and_cblob_ignore(self):
+    def select_db_type_and_cblob_ignore_and_check(self):
+        #
+        self.db_type = int(input(
+                '\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choice: '
+        ))
         # check db type
         if self.db_type not in (1,2):
             print('=DB CHOOSE ERROR=')
@@ -106,8 +108,18 @@ class App:
 
         # main_df = main_df[main_df['TableT'].notnull()]
         
+        #
+        main_df['SchemaS'] = main_df['SchemaS'].apply(lambda x: str(x).strip())
+        main_df['TableS'] = main_df['TableS'].apply(lambda x: str(x).strip())
+        main_df['CodeS'] = main_df['CodeS'].apply(lambda x: str(x).strip())
+        main_df['Data Type'] = main_df['Data Type']\
+                                        .apply(lambda x: str(x).strip())
+        main_df['Length'] = main_df['Length'].apply(lambda x: str(x).strip())
+        main_df['SchemaT'] = main_df['SchemaT'].apply(lambda x: str(x).strip())
+        main_df['TableT'] = main_df['TableT'].apply(lambda x: str(x).strip())
         main_df['CodeT'] = main_df['CodeT'].apply(lambda x: str(x).strip())
 
+        #
         main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
         
         if self.IsCBlobTableIgnore:
@@ -141,6 +153,9 @@ class App:
     def generate_json(self):
         
         print('=GENERATING JSON=')
+
+        #
+        self.select_db_type_and_cblob_ignore_and_check()
 
         schema_t = self.main_df.iloc[0]['SchemaT']
         print(f'Target Schema: {schema_t}')
@@ -386,8 +401,6 @@ class App:
         print('=DONE=')
 
     def run(self):
-        #
-        self.check_db_type_and_cblob_ignore()
         #
         self.parse_directory()
         #
