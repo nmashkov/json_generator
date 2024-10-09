@@ -21,6 +21,11 @@ class App:
         self.db_type = 0
         self.IsCBlobTableIgnore = 1
         self.IsCBlobColumnIgnore = 0
+        #
+        self.custom_schemas_s_name = ''
+        self.ignore_table_s_list = []
+        self.ignore_code_s_list = []
+        self.schtbl_json_max_cnt = 99
     
     def select_db_type_and_cblob_ignore_and_check(self):
         #
@@ -103,10 +108,9 @@ class App:
 
         main_df = main_df.drop(0,axis=0)
 
-        main_df.columns = ['SchemaS', 'TableS', 'CodeS', 'Data Type',
-                           'Length', 'SchemaT', 'TableT', 'CodeT']
-
-        # main_df = main_df[main_df['TableT'].notnull()]
+        main_df.columns = ['SchemaS', 'TableS', 'CodeS',
+                           'Data Type', 'Length',
+                           'SchemaT', 'TableT', 'CodeT']
         
         #
         main_df['SchemaS'] = main_df['SchemaS'].apply(lambda x: str(x).strip())
@@ -138,10 +142,19 @@ class App:
                         and (main_df['Data Type']!='BLOB')
                 ]
 
-        main_df['schemaS.tableS'] = main_df['SchemaS'] + '.' + main_df['TableS']
+        if self.custom_schemas_s_name:
+            main_df['SchemaS'] = self.custom_schemas_s_name
+        
+        main_df['schemaS.tableS'] = main_df['SchemaS'] +'.'+ main_df['TableS']
         
         main_df = main_df.fillna('')
 
+        #
+        main_df = main_df[~main_df['TableS'].isin(self.ignore_table_s_list)]
+
+        main_df = main_df[~main_df['CodeS'].isin(self.ignore_code_s_list)]
+
+        #
         main_df = main_df.sort_values(['TableS'])
 
         main_df.index = range(1, len(main_df) + 1)
@@ -163,11 +176,11 @@ class App:
         
         # get schemaS.tables from mapping
         schemaS_tableS_lst = self.main_df['schemaS.tableS'].unique()
+        #
         schtbl_len = len(schemaS_tableS_lst)
         print(f"Number of source schema.tables: {schtbl_len}")
 
         schtbl_cnt_trigger = 0
-        schtbl_cnt_max = 99
         schtbl_num = 1
 
         if self.db_type == 1:  # Oracle
@@ -227,7 +240,7 @@ class App:
                     }
                 }
                 
-                if schtbl_cnt_trigger < schtbl_cnt_max:
+                if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
 
                     schtbl_cnt_trigger += 1
 
@@ -241,7 +254,8 @@ class App:
 
                     self.print_results(schema_t,
                                        test_flow_entity_lst,
-                                       schtbl_num)
+                                       schtbl_num,
+                                       self.schtbl_json_max_cnt+1)
                     
                     schtbl_num += 1
 
@@ -300,7 +314,7 @@ class App:
                     }
                 }
 
-                if schtbl_cnt_trigger < schtbl_cnt_max:
+                if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
 
                     schtbl_cnt_trigger += 1
 
@@ -314,7 +328,8 @@ class App:
 
                     self.print_results(schema_t,
                                        test_flow_entity_lst,
-                                       schtbl_num)
+                                       schtbl_num,
+                                       self.schtbl_json_max_cnt+1)
                     
                     schtbl_num += 1
 
@@ -322,17 +337,22 @@ class App:
 
         # for last part of batch
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num > 1:
+            rest_tbl_cnt = schtbl_len - (schtbl_num-1)\
+                                            * (self.schtbl_json_max_cnt+1)
             self.print_results(schema_t,
                                test_flow_entity_lst,
-                               schtbl_num)
-        # if mapping table count less than 200
+                               schtbl_num,
+                               rest_tbl_cnt)
+        # if mapping table count less than self.schtbl_json_max_cnt
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num == 1:
             schtbl_num = f'max_{schtbl_len}'
             self.print_results(schema_t,
                                test_flow_entity_lst,
-                               schtbl_num)
+                               schtbl_num,
+                               schtbl_len)
     
-    def print_results(self, schema_t, test_flow_entity_lst, schtbl_num):
+    def print_results(self, schema_t, test_flow_entity_lst,
+                      schtbl_num, schtbl_len):
         # print result to file
         print('=PRINT RESULT=')
 
@@ -385,8 +405,18 @@ class App:
             
         results_file = str(self.mapping_filename.split('.')[0])
 
+        blob_info = ''
+
+        if self.IsCBlobTableIgnore:
+            blob_info = 'cblob_tbl_ignore'
+        elif self.IsCBlobColumnIgnore:
+            blob_info = 'cblob_clm_ignore'
+
         results_dir = (
-            f'{WORKING_DIR}/{results_file}_{str(schtbl_num)}_load.sh'
+            f'{WORKING_DIR}/{results_file}_'
+            f'{blob_info}_'
+            f'{str(schtbl_num)}_{str(schtbl_len)}_'
+            f'load.sh'
             )
         
         print(f'results_dir: {results_dir}')
