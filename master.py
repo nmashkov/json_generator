@@ -13,19 +13,23 @@ WORKING_DIR = f'{BASE_DIR}/{TARGET_DIR}'
 
 class App:
     def __init__(self):
+        # 
         self.dir_list = os.listdir(WORKING_DIR)
         self.mapping_dict = {}
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
         self.db_type = 0
+        self.schtbl_json_max_cnt = 99
+        # CBLOB
+        self.TakeOnlyCBlobTables = 0
         self.IsCBlobTableIgnore = 1
         self.IsCBlobColumnIgnore = 0
-        #
-        self.custom_schemas_s_name = ''
+        # CHEATS
+        self.custom_schema_s_name = ''
         self.ignore_table_s_list = []
         self.ignore_code_s_list = []
-        self.schtbl_json_max_cnt = 99
+        self.take_only_table_s_list = []
     
     def select_db_type_and_cblob_ignore_and_check(self):
         #
@@ -89,7 +93,6 @@ class App:
 
             self.mapping_filename = self.mapping_dict[int(mapping_key)]
 
-        
         try:
             print("Reading mapping file...")
             main_df = pd.read_excel(f'{WORKING_DIR}/{self.mapping_filename}',
@@ -112,6 +115,8 @@ class App:
                            'Data Type', 'Length',
                            'SchemaT', 'TableT', 'CodeT']
         
+        main_df = main_df.fillna('')
+
         #
         main_df['SchemaS'] = main_df['SchemaS'].apply(lambda x: str(x).strip())
         main_df['TableS'] = main_df['TableS'].apply(lambda x: str(x).strip())
@@ -126,33 +131,42 @@ class App:
         #
         main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
         
-        if self.IsCBlobTableIgnore:
-            ignore_table_list = []
-            for _, row in main_df.iterrows():
-                        s_dt = row['Data Type']
-                        s_table = row['TableS']
-                        if s_dt in ('CLOB', 'BLOB'):
-                            ignore_table_list.append(s_table)
-            if ignore_table_list:
-                for table in ignore_table_list:
-                    main_df = main_df[main_df['TableS']!=table]
-        elif self.IsCBlobColumnIgnore:
-            main_df = main_df[
-                    (main_df['Data Type']!='CLOB')
-                        and (main_df['Data Type']!='BLOB')
+        # CBLOB
+        if self.TakeOnlyCBlobTables:
+            cblob_table_df = main_df[
+                    main_df['Data Type'].isin(['CLOB', 'BLOB'])
                 ]
-
-        if self.custom_schemas_s_name:
-            main_df['SchemaS'] = self.custom_schemas_s_name
+            cblob_table_list = cblob_table_df['TableS'].unique().tolist()
+            if cblob_table_list:
+                main_df = main_df[main_df['TableS']\
+                                    .isin(cblob_table_list)]
+        elif self.IsCBlobTableIgnore:
+            cblob_table_df = main_df[
+                    main_df['Data Type'].isin(['CLOB', 'BLOB'])
+                ]
+            ignore_cblob_table_list = cblob_table_df['TableS'].unique().tolist()
+            if ignore_cblob_table_list:
+                main_df = main_df[~main_df['TableS']\
+                                    .isin(ignore_cblob_table_list)]
+        elif self.IsCBlobColumnIgnore:
+            main_df = main_df[~main_df['Data Type'].isin(['CLOB', 'BLOB'])]
         
-        main_df['schemaS.tableS'] = main_df['SchemaS'] +'.'+ main_df['TableS']
+        # CHEAT
+        if self.custom_schema_s_name:
+            main_df['SchemaS'] = self.custom_schema_s_name
         
-        main_df = main_df.fillna('')
-
         #
-        main_df = main_df[~main_df['TableS'].isin(self.ignore_table_s_list)]
+        main_df['schemaS.tableS'] = main_df['SchemaS'] +'.'+ main_df['TableS']
 
-        main_df = main_df[~main_df['CodeS'].isin(self.ignore_code_s_list)]
+        # CHEAT
+        if self.take_only_table_s_list:
+            main_df = main_df[main_df['TableS'].isin(self.take_only_table_s_list)]
+
+        if self.ignore_table_s_list:
+            main_df = main_df[~main_df['TableS'].isin(self.ignore_table_s_list)]
+
+        if self.ignore_code_s_list:
+            main_df = main_df[~main_df['CodeS'].isin(self.ignore_code_s_list)]
 
         #
         main_df = main_df.sort_values(['TableS'])
@@ -207,6 +221,7 @@ class App:
                     source_column_name = row['CodeS']
                     source_column_type = row['Data Type']
                     source_column_length = ''
+
                     if row['Length'] and\
                         row['Data Type'].lower() not in ('smallint',
                                                          'date',
@@ -217,6 +232,7 @@ class App:
                         source_column_length = '(255)'
                     else:
                         source_column_length = ''
+
                     query_cast_list.append(
                         f"cast('{source_column_name}' as "
                         f"{source_column_type}{source_column_length}) as "
@@ -390,7 +406,19 @@ class App:
             }
         """
         
-        prefix = """spark-submit --master yarn --conf spark.master=yarn --conf spark.submit.deployMode=cluster --conf spark.yarn.maxAppAttempts=1 --conf spark.sql.broadcastTimeout=600 --conf spark.hadoop.hive.exec.dynamic.partition=true --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict --conf spark.driver.userClassPathFirst=true --conf spark.executor.userClassPathFirst=true --jars /home/hdoop/drivers/jcc-11.5.9.0.jar,/home/hdoop/drivers/commons-pool2-2.11.0.jar,/home/hdoop/drivers/delta-core_2.13-2.2.0.jar,/home/hdoop/drivers/delta-storage-2.2.0.jar,/home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar,/home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar,/home/hdoop/drivers/org.apache.servicemix.bundles.kafka-clients-2.4.1_1.jar,/home/hdoop/drivers/postgresql-42.3.1.jar,/home/hdoop/drivers/spark-sql-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/spark-token-provider-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/vertica-jdbc-11.1.0-0.jar,/home/hdoop/drivers/xdb6-18.3.0.0.jar,/home/hdoop/drivers/xmlparserv2-19.3.0.0.jar --class sparketl.Main /home/hdoop/SparkEtl_ora.jar ' """
+        prefix = """spark-submit \\
+                --master yarn \\
+                --conf spark.master=yarn \\
+                --conf spark.submit.deployMode=cluster \\
+                --conf spark.yarn.maxAppAttempts=1 \\
+                --conf spark.sql.broadcastTimeout=600 \\
+                --conf spark.hadoop.hive.exec.dynamic.partition=true \\
+                --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\
+                --conf spark.driver.userClassPathFirst=true \\
+                --conf spark.executor.userClassPathFirst=true \\
+                --jars /home/hdoop/drivers/jcc-11.5.9.0.jar,/home/hdoop/drivers/commons-pool2-2.11.0.jar,/home/hdoop/drivers/delta-core_2.13-2.2.0.jar,/home/hdoop/drivers/delta-storage-2.2.0.jar,/home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar,/home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar,/home/hdoop/drivers/org.apache.servicemix.bundles.kafka-clients-2.4.1_1.jar,/home/hdoop/drivers/postgresql-42.3.1.jar,/home/hdoop/drivers/spark-sql-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/spark-token-provider-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/vertica-jdbc-11.1.0-0.jar,/home/hdoop/drivers/xdb6-18.3.0.0.jar,/home/hdoop/drivers/xmlparserv2-19.3.0.0.jar \\
+                --class sparketl.Main /home/hdoop/SparkEtl_ora.jar \\
+                ' """
 
         suffix = " '"
 
@@ -407,10 +435,14 @@ class App:
 
         blob_info = ''
 
-        if self.IsCBlobTableIgnore:
+        if self.TakeOnlyCBlobTables:
+            blob_info = 'cblob_only'
+        elif self.IsCBlobTableIgnore:
             blob_info = 'cblob_tbl_ignore'
         elif self.IsCBlobColumnIgnore:
             blob_info = 'cblob_clm_ignore'
+        else:
+            blob_info = 'all_tables'
 
         results_dir = (
             f'{WORKING_DIR}/{results_file}_'
