@@ -19,8 +19,8 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = 1  # 1: Oracle, 2: MSSQL
-        self.env_type = 2  # 1: Local, 2: Prod
+        self.db_type = 2  # 1: Oracle, 2: MSSQL
+        self.env_type = 1  # 1: Local, 2: Prod
         self.flow_type_select = 2  # 1: columnCasts, 2: without columnCasts
         self.schtbl_json_max_cnt = 99
         # CBLOB
@@ -476,8 +476,7 @@ class App:
 
         prefix_local = """spark-submit \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.sql.broadcastTimeout=600 \\\n--conf spark.hadoop.hive.exec.dynamic.partition=true \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.driver.userClassPathFirst=true \\\n--conf spark.executor.userClassPathFirst=true \\\n--jars /home/hdoop/drivers/jcc-11.5.9.0.jar,/home/hdoop/drivers/commons-pool2-2.11.0.jar,/home/hdoop/drivers/delta-core_2.13-2.2.0.jar,/home/hdoop/drivers/delta-storage-2.2.0.jar,/home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar,/home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar,/home/hdoop/drivers/org.apache.servicemix.bundles.kafka-clients-2.4.1_1.jar,/home/hdoop/drivers/postgresql-42.3.1.jar,/home/hdoop/drivers/spark-sql-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/spark-token-provider-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/vertica-jdbc-11.1.0-0.jar,/home/hdoop/drivers/xdb6-18.3.0.0.jar,/home/hdoop/drivers/xmlparserv2-19.3.0.0.jar \\\n--class sparketl.Main /home/hdoop/SparkEtl_ora.jar \\\n' """
 
-        prefix_prod_ora = """
-        spark3-submit \\\n--keytab ~/TODO_TUZ_LD.keytab \\\n--principal TODO_TUZ_LD@REGION.VTB.RU \\\n--name TODO_SYSTEM_arch_TARGETNAME_load_N \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
+        prefix_prod_ora = """spark3-submit \\\n--keytab ~/TODO_TUZ_LD.keytab \\\n--principal TODO_TUZ_LD@REGION.VTB.RU \\\n--name TODO_SYSTEM_arch_TARGETNAME_load_N \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
         prefix_prod_mssql = """spark3-submit \\\n--keytab ~/TODO_TUZ_LD.keytab \\\n--principal TODO_TUZ_LD@REGION.VTB.RU \\\n--name TODO_SYSTEM_arch_TARGETNAME_load_N \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=UTC \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=UTC \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
@@ -521,18 +520,26 @@ class App:
         else:
             columnCasts_info = ''
 
-        env_info = ''
+        env_db_info = ''
 
-        if self.env_type == 1:
-            env_info = 'local_'
-        elif self.env_type == 2:
-            env_info = 'prod_'
+        if self.env_type == 1:  # Local
+            env_db_info = 'local_'
+            if self.db_type == 1:  # Oracle
+                env_db_info += 'oracle_'
+            elif self.db_type == 2:  # MSSQL
+                env_db_info += 'mssql_'
+        elif self.env_type == 2:  # Prod
+            env_db_info = 'prod_'
+            if self.db_type == 1:  # Oracle
+                env_db_info += 'oracle_'
+            elif self.db_type == 2:  # MSSQL
+                env_db_info += 'mssql_'
 
         results_dir = (
             f'{WORKING_DIR}/{results_file}_'
             f'{blob_info}_'
             f'{columnCasts_info}'
-            f'{env_info}'
+            f'{env_db_info}'
             f'{str(schtbl_num)}_{str(schtbl_len)}_'
             f'load.sh'
             )
