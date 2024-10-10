@@ -19,42 +19,52 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = 0
+        self.db_type = 0  # 1: Oracle, 2: MSSQL
         self.schtbl_json_max_cnt = 99
         # CBLOB
-        self.TakeOnlyCBlobTables = 0
-        self.IsCBlobTableIgnore = 1
-        self.IsCBlobColumnIgnore = 0
+        self.TakeOnlyCBlobTables = 2  # 0: init select, 1: Yes, 2: No
+        self.IsCBlobTableIgnore = 1   # 0: init select, 1: Yes, 2: No
+        self.IsCBlobColumnIgnore = 2  # 0: init select, 1: Yes, 2: No
         # CHEATS
         self.custom_schema_s_name = ''
         self.ignore_table_s_list = []
         self.ignore_code_s_list = []
         self.take_only_table_s_list = []
     
-    def select_db_type_and_cblob_ignore_and_check(self):
-        #
-        self.db_type = int(input(
+    def selection_block(self):
+        # select db_type
+        if not self.db_type:
+            self.db_type = int(input(
                 '\nChoose DB type:\n1: Oracle\n2: MSSQL\nYour choice: '
-        ))
+            ))
+
         # check db type
         if self.db_type not in (1,2):
             print('=DB CHOOSE ERROR=')
             print(f"db_type: {self.db_type}")
             self.pause()
             exit()
-        #
-        """
-        if self.db_type == 1:
-            self.IsCBlobTableIgnore = int(input(
-                '\nIgnore tables with CLOB/BLOB attributes for Oracle?:'
+
+        # select cblob behavior        
+        if self.db_type == 1 and \
+                not self.TakeOnlyCBlobTables and \
+                not self.IsCBlobTableIgnore and \
+                not self.IsCBlobColumnIgnore:
+            self.TakeOnlyCBlobTables = int(input(
+                '\nTake only tables with CLOB/BLOB attributes for Oracle?:'
                 '\n1: Yes\n2: No\n'
             ))
-            if self.IsCBlobTableIgnore != 1:
+            if self.TakeOnlyCBlobTables == 2:
+                self.IsCBlobTableIgnore = int(input(
+                    '\nIgnore tables with CLOB/BLOB attributes for Oracle?:'
+                    '\n1: Yes\n2: No\n'
+                ))
+            if self.IsCBlobTableIgnore == 2:
                 self.IsCBlobColumnIgnore = int(input(
                     '\nIgnore CLOB/BLOB attributes for Oracle?:'
                     '\n1: Yes\n2: No\n'
                 ))
-        """
+        
 
     def pause(self):
         return input("\nPress the <ENTER> key to exit...")
@@ -132,7 +142,7 @@ class App:
         main_df = main_df[main_df['CodeT']!='hdp_processed_dttm']
         
         # CBLOB
-        if self.TakeOnlyCBlobTables:
+        if self.TakeOnlyCBlobTables == 1:
             cblob_table_df = main_df[
                     main_df['Data Type'].isin(['CLOB', 'BLOB'])
                 ]
@@ -140,7 +150,7 @@ class App:
             if cblob_table_list:
                 main_df = main_df[main_df['TableS']\
                                     .isin(cblob_table_list)]
-        elif self.IsCBlobTableIgnore:
+        elif self.IsCBlobTableIgnore == 1:
             cblob_table_df = main_df[
                     main_df['Data Type'].isin(['CLOB', 'BLOB'])
                 ]
@@ -148,7 +158,7 @@ class App:
             if ignore_cblob_table_list:
                 main_df = main_df[~main_df['TableS']\
                                     .isin(ignore_cblob_table_list)]
-        elif self.IsCBlobColumnIgnore:
+        elif self.IsCBlobColumnIgnore == 1:
             main_df = main_df[~main_df['Data Type'].isin(['CLOB', 'BLOB'])]
         
         # CHEAT
@@ -182,7 +192,7 @@ class App:
         print('=GENERATING JSON=')
 
         #
-        self.select_db_type_and_cblob_ignore_and_check()
+        self.selection_block()
 
         schema_t = self.main_df.iloc[0]['SchemaT']
         print(f'Target Schema: {schema_t}')
@@ -435,11 +445,11 @@ class App:
 
         blob_info = ''
 
-        if self.TakeOnlyCBlobTables:
+        if self.TakeOnlyCBlobTables == 1:
             blob_info = 'cblob_only'
-        elif self.IsCBlobTableIgnore:
+        elif self.IsCBlobTableIgnore == 1:
             blob_info = 'cblob_tbl_ignore'
-        elif self.IsCBlobColumnIgnore:
+        elif self.IsCBlobColumnIgnore == 1:
             blob_info = 'cblob_clm_ignore'
         else:
             blob_info = 'all_tables'
