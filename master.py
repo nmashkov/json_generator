@@ -19,24 +19,24 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = 1  # 1: Oracle, 2: MSSQL
+        self.db_type = 2  # 1: Oracle, 2: MSSQL
         self.env_type = 2  # 1: Local, 2: Prod
-        self.flow_type_select = 1  # 1: columnCasts, 2: without columnCasts
+        self.flow_type_select = 2  # 1: columnCasts, 2: without columnCasts
         self.schtbl_json_max_cnt = 49
         # CBLOB
-        self.TakeOnlyCBlobTables = 1  # 0: init select, 1: Yes, 2: No
-        self.IsCBlobTableIgnore = 2   # all 0, or 1 and 2
+        self.TakeOnlyCBlobTables = 2  # 0: init select, 1: Yes, 2: No
+        self.IsCBlobTableIgnore = 1   # all 0, or 1 and 2
         self.IsCBlobColumnIgnore = 2  # default: 2 1 2
         # COUNTS
         # self.source_counts_csv = ''
         # SYSTEM PARAMETERS
-        self.system_number = '556'
-        self.zno_number = '1'
+        self.system_number = '1054'
+        self.zno_number = '5'
         self.short_name = 1  # 1: Yes, 2: No
         self.tuz_ld = ''
         self.tuz_rd = ''
         self.url = ''
-        self.logs = 'logs556'
+        self.logs = f'logs{self.system_number}'
         # CHEATS
         self.custom_schema_s_name = ''
         self.table_type_filter = 'TableS'  # TableS TableT
@@ -363,8 +363,8 @@ class App:
                     ]
 
                 schema_s = current_df.iloc[0]['SchemaS']
-                table_s = current_df.iloc[0]['TableS']
-                table_t = current_df.iloc[0]['TableT']
+                source_table = current_df.iloc[0]['TableS']
+                target_table = current_df.iloc[0]['TableT']
                 
                 query_full = ''
                 query_prefix = 'select '
@@ -372,22 +372,25 @@ class App:
                 query_cast_list = []
 
                 for _, row in current_df.iterrows():
-                    attr_f = row['CodeS']
-                    attr_l = row['CodeT']
+                    target_column_name = row['CodeT']
+                    source_column_name = row['CodeS']
                     source_column_type = row['DataTypeS']
                     source_column_length = ''
+
                     if row['Length'] and\
-                        row['DataTypeS'].lower() not in ('smallint',
-                                                        'date',
-                                                        'int',
-                                                        'integer'):
+                        row['DataTypeS'].lower() not in ('image',
+                                                         'ntext',
+                                                         'int',
+                                                         'text',
+                                                         'datetime'):
                         source_column_length = f"({row['Length']})"
                     else:
                         source_column_length = ''
+
                     query_cast_list.append(
-                        f"cast('[{attr_f}]' as "
+                        f"cast('[{source_column_name}]' as "
                         f"{source_column_type}{source_column_length}) as "
-                        f"'[{attr_l}]'"
+                        f"'[{target_column_name}]'"
                         )
 
                 query_full = ', '.join(query_cast_list)
@@ -398,11 +401,11 @@ class App:
                     "loadType": "Scd1Replace",
                     "source": {
                         "schema": schema_s,
-                        "table": '['+table_s+']',
+                        "table": '['+source_table+']',
                         "query": query_full
                     },
                     "target": {
-                        "table": table_t
+                        "table": target_table
                     }
                 }
 
