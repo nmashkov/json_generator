@@ -19,10 +19,12 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = 2  # 1: Oracle, 2: MSSQL
+        self.db_type = 1  # 1: Oracle, 2: MSSQL
         self.env_type = 2  # 1: Local, 2: Prod
-        self.flow_type_select = 2  # 1: columnCasts, 2: without columnCasts
+        self.flow_type_select = 1  # 1: columnCasts, 2: Query
         self.schtbl_json_max_cnt = 49
+        self.oracle_dt_wo_length = ('smallint', 'date', 'int', 'integer')
+        self.mssql_dt_wo_length = ('image', 'ntext', 'int', 'text', 'datetime')
         # CBLOB
         self.TakeOnlyCBlobTables = 2  # 0: init select, 1: Yes, 2: No
         self.IsCBlobTableIgnore = 1   # all 0, or 1 and 2
@@ -30,8 +32,8 @@ class App:
         # COUNTS
         # self.source_counts_csv = ''
         # SYSTEM PARAMETERS
-        self.system_number = '1054'
-        self.zno_number = '5'
+        self.system_number = 'test'
+        self.zno_number = '1'
         self.short_name = 1  # 1: Yes, 2: No
         self.tuz_ld = ''
         self.tuz_rd = ''
@@ -41,7 +43,7 @@ class App:
         self.custom_schema_s_name = ''
         self.table_type_filter = 'TableS'  # TableS TableT
         self.code_type_filter = 'CodeS'  # CodeS CodeT
-        self.take_only_table_list = []
+        self.take_only_table_list = []  # a3_archive_objects
         self.ignore_table_list = []
         self.ignore_code_list = []
     
@@ -148,7 +150,8 @@ class App:
                                             "T,"  # Target Schema
                                             "U,"  # Tagret Table
                                             "V,"  # Target Code
-                                            "Z")  # Target Data Type
+                                            "Z,"  # Target Data Type
+                                            "AA") # Target Length
         except Exception as e:
             print("Error while reading file: ", e)
             self.pause()
@@ -156,9 +159,9 @@ class App:
         main_df = main_df.drop(0,axis=0)
 
         main_df.columns = ['SchemaS', 'TableS', 'CodeS',
-                           'DataTypeS', 'Length',
+                           'DataTypeS', 'LengthS',
                            'SchemaT', 'TableT', 'CodeT',
-                           'DataTypeT']
+                           'DataTypeT', 'LengthT']
         
         main_df = main_df.fillna('')
 
@@ -168,27 +171,21 @@ class App:
         main_df['CodeS'] = main_df['CodeS'].apply(lambda x: str(x).strip())
         main_df['DataTypeS'] = main_df['DataTypeS']\
                                         .apply(lambda x: str(x).strip())
-        main_df['Length'] = main_df['Length'].apply(lambda x: str(x).strip())
+        main_df['LengthS'] = main_df['LengthS'].apply(lambda x: str(x).strip())
+        #
         main_df['SchemaT'] = main_df['SchemaT'].apply(lambda x: str(x).strip())
         main_df['TableT'] = main_df['TableT'].apply(lambda x: str(x).strip())
         main_df['CodeT'] = main_df['CodeT'].apply(lambda x: str(x).strip())
         main_df['DataTypeT'] = main_df['DataTypeT']\
                                         .apply(lambda x: str(x).strip())
+        main_df['LengthT'] = main_df['LengthT'].apply(lambda x: str(x).strip())
 
         #
         main_df = main_df[~main_df['CodeT'].isin(['hdp_processed_dttm'])]
         main_df = main_df[main_df['CodeT']!='']
         
         # CBLOB
-        if self.TakeOnlyCBlobTables == 1:
-            cblob_table_df = main_df[
-                    main_df['DataTypeS'].isin(['CLOB', 'BLOB'])
-                ]
-            cblob_table_list = cblob_table_df['TableS'].unique().tolist()
-            if cblob_table_list:
-                main_df = main_df[main_df['TableS']\
-                                    .isin(cblob_table_list)]
-        elif self.IsCBlobTableIgnore == 1:
+        if self.IsCBlobTableIgnore == 1:
             cblob_table_df = main_df[
                     main_df['DataTypeS'].isin(['CLOB', 'BLOB'])
                 ]
@@ -196,6 +193,16 @@ class App:
             if ignore_cblob_table_list:
                 main_df = main_df[~main_df['TableS']\
                                     .isin(ignore_cblob_table_list)]
+        elif self.TakeOnlyCBlobTables == 1:
+            cblob_table_df = main_df[
+                    main_df['DataTypeS'].isin(['CLOB', 'BLOB'])
+                ]
+            cblob_table_list = cblob_table_df['TableS'].unique().tolist()
+            if cblob_table_list:
+                main_df = main_df[main_df['TableS']\
+                                    .isin(cblob_table_list)]
+            if self.IsCBlobColumnIgnore == 1:
+                main_df = main_df[~main_df['DataTypeS'].isin(['CLOB', 'BLOB'])]
         elif self.IsCBlobColumnIgnore == 1:
             main_df = main_df[~main_df['DataTypeS'].isin(['CLOB', 'BLOB'])]
         
@@ -270,30 +277,35 @@ class App:
                     source_column_type = row['DataTypeS']
                     target_column_type = row['DataTypeT']
                     source_column_length = ''
+                    target_column_length = ''
 
-                    if row['Length'] and\
-                        row['DataTypeS'].lower() not in ('smallint',
-                                                         'date',
-                                                         'int',
-                                                         'integer'):
-                        source_column_length = f"({row['Length']})"
+                    if row['LengthS'] and\
+                        row['DataTypeS'].lower() not in self.oracle_dt_wo_length:
+                        source_column_length = f"({row['LengthS']})"
                     elif row['DataTypeS'].lower() == 'varchar2':
                         source_column_length = '(4000)'
                     else:
                         source_column_length = ''
+                        
+                    if row['LengthT'] and\
+                        row['DataTypeT'].lower()=='decimal':
+                        target_column_length = f"({row['LengthT']})"
+                    else:
+                        target_column_length = ''
 
-                    query_cast_list.append(
-                        f"cast('{source_column_name}' as "
-                        f"{source_column_type}{source_column_length}) as "
-                        f"'{target_column_name}'"
+                    if self.flow_type_select == 1:
+                        columns_casts.append(
+                            {
+                                "name": source_column_name,
+                                "colType": f"{target_column_type}{target_column_length}"
+                            }
                         )
-
-                    columns_casts.append(
-                        {
-                            "name": source_column_name,
-                            "colType": target_column_type
-                        }
-                    )
+                    elif self.flow_type_select == 2:
+                        query_cast_list.append(
+                            f"cast('{source_column_name}' as "
+                            f"{source_column_type}{source_column_length}) as "
+                            f"'{target_column_name}'"
+                        )
 
                 query_full = ', '.join(query_cast_list)
 
@@ -311,13 +323,13 @@ class App:
                             "columnCasts": columns_casts,
                             "jdbcDialect": "OracleDialect"
                         },
-                        "query": query_full,
+                        # "query": query_full,
                         "target": {
                             "table": target_table
                         }
                     }
                 elif self.flow_type_select == 2:
-                    # without columnCasts
+                    # Query
                     flow_template = {
                         "loadType": "Scd1Replace",
                         "source": {
@@ -377,13 +389,9 @@ class App:
                     source_column_type = row['DataTypeS']
                     source_column_length = ''
 
-                    if row['Length'] and\
-                        row['DataTypeS'].lower() not in ('image',
-                                                         'ntext',
-                                                         'int',
-                                                         'text',
-                                                         'datetime'):
-                        source_column_length = f"({row['Length']})"
+                    if row['LengthS'] and\
+                        row['DataTypeS'].lower() not in self.mssql_dt_wo_length:
+                        source_column_length = f"({row['LengthS']})"
                     else:
                         source_column_length = ''
 
