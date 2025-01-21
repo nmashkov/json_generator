@@ -33,17 +33,19 @@ class App:
         # self.source_counts_csv = ''
         # SYSTEM PARAMETERS
         self.system_number = 'test'
-        self.zno_number = '1'
+        self.zno_number = ''
         self.short_name = 1  # 1: Yes, 2: No
         self.tuz_ld = ''
-        self.tuz_rd = ''
+        self.tuz_rd = ''  # local - user
         self.url = ''
+        self.local_password = ''
         self.logs = f'logs{self.system_number}'
         # CHEATS
         self.custom_schema_s_name = ''
+        self.custom_schema_t_name = ''
         self.table_type_filter = 'TableS'  # TableS TableT
         self.code_type_filter = 'CodeS'  # CodeS CodeT
-        self.take_only_table_list = []  # a3_archive_objects
+        self.take_only_table_list = []
         self.ignore_table_list = []
         self.ignore_code_list = []
     
@@ -209,6 +211,9 @@ class App:
         # CHEAT
         if self.custom_schema_s_name:
             main_df['SchemaS'] = self.custom_schema_s_name
+        
+        if self.custom_schema_t_name:
+            main_df['SchemaT'] = self.custom_schema_t_name
 
         if self.take_only_table_list:
             main_df = main_df[main_df[self.table_type_filter].isin(self.take_only_table_list)]
@@ -472,15 +477,30 @@ class App:
         if self.url:
             print_url = self.url
         else:
-            print_url = 'TODO'
+            print_url = 'TODO_URL'
         if self.logs:
             print_logs = self.logs
         else:
-            print_logs = 'TODO'
+            print_logs = 'TODO_LOGS'
 
         # self.db_type = 1  # 1: Oracle, 2: MSSQL
         if self.db_type == 1:
             main_json_template = {
+                "connection": {
+                    "connType": "jdbc",
+                    "url": "###connection.url###",
+                    "driver": "oracle.jdbc.driver.OracleDriver",
+                    "user": "###connection.user###",
+                    "password": "###connection.password###"
+                },
+                "commonInfo": {
+                    "targetSchema": schema_t,
+                    "etlSchema": schema_t,
+                    "logsTable": f"{print_logs}"
+                },
+                "flows": test_flow_entity_lst
+                }
+            main_json_template_backup = {
                 "connection": {
                     "connType": "jdbc",
                     "url": f"{print_url}",
@@ -497,6 +517,21 @@ class App:
                 }
         elif self.db_type == 2:
             main_json_template = {
+                "connection": {
+                    "connType": "jdbc",
+                    "url": "###connection.url###",
+                    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+                    "user": "###connection.user###",
+                    "password": "###connection.password###"
+                },
+                "commonInfo": {
+                    "targetSchema": schema_t,
+                    "etlSchema": schema_t,
+                    "logsTable": f"{print_logs}"
+                },
+                "flows": test_flow_entity_lst
+                }
+            main_json_template_backup = {
                 "connection": {
                     "connType": "jdbc",
                     "url": f"{print_url}",
@@ -580,18 +615,33 @@ class App:
             )
         
         # form final json
+        
+        if self.local_password:
+            print_local_password = self.local_password
+        else:
+            print_local_password = 'TODO_PW' 
+        
+        prefix_local_oracle = f"""spark-submit --name {print_load_name} --conf spark.connection.url=\"{print_url}\" --conf spark.connection.user=\"{print_tuz_rd}\" --conf spark.connection.password=\"{print_local_password}\" --master yarn --conf spark.master=yarn --conf spark.submit.deployMode=cluster --conf spark.yarn.maxAppAttempts=1 --conf spark.sql.broadcastTimeout=600 --conf spark.hadoop.hive.exec.dynamic.partition=true --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict --conf spark.driver.userClassPathFirst=true --conf spark.executor.userClassPathFirst=true --conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow --conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow --jars /home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar --class sparketl.Main /home/hdoop/SparkEtl_v2.jar ' """
+        
+        prefix_local_mssql = f"""spark-submit --name {print_load_name} --conf spark.connection.url=\"{print_url}\" --conf spark.connection.user=\"{print_tuz_rd}\" --conf spark.connection.password=\"{print_local_password}\" --master yarn --conf spark.master=yarn --conf spark.submit.deployMode=cluster --conf spark.yarn.maxAppAttempts=1  --conf spark.sql.broadcastTimeout=600 --conf spark.hadoop.hive.exec.dynamic.partition=true --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict --conf spark.driver.userClassPathFirst=true --conf spark.executor.userClassPathFirst=true --conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow --conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow --jars /home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar --class sparketl.Main /home/hdoop/SparkEtl_v2.jar ' """
 
-        prefix_local = f"""spark-submit \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.sql.broadcastTimeout=600 \\\n--conf spark.hadoop.hive.exec.dynamic.partition=true \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.driver.userClassPathFirst=true \\\n--conf spark.executor.userClassPathFirst=true \\\n--jars /home/hdoop/drivers/jcc-11.5.9.0.jar,/home/hdoop/drivers/commons-pool2-2.11.0.jar,/home/hdoop/drivers/delta-core_2.13-2.2.0.jar,/home/hdoop/drivers/delta-storage-2.2.0.jar,/home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar,/home/hdoop/drivers/ojdbc8-21.6.0.0.1.jar,/home/hdoop/drivers/orai18n-19.3.0.0.jar,/home/hdoop/drivers/org.apache.servicemix.bundles.kafka-clients-2.4.1_1.jar,/home/hdoop/drivers/postgresql-42.3.1.jar,/home/hdoop/drivers/spark-sql-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/spark-token-provider-kafka-0-10_2.13-3.3.2.jar,/home/hdoop/drivers/vertica-jdbc-11.1.0-0.jar,/home/hdoop/drivers/xdb6-18.3.0.0.jar,/home/hdoop/drivers/xmlparserv2-19.3.0.0.jar \\\n--class sparketl.Main /home/hdoop/SparkEtl_ora.jar \\\n' """
+        prefix_prod_oracle_backup = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
+        
+        prefix_prod_oracle = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--conf spark.connection.url=\"{print_url}\" \\\n--conf spark.connection.user=\"{print_tuz_rd}\" \\\n--conf spark.connection.password=TODO \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
-        prefix_prod_ora = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
-
-        prefix_prod_mssql = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
+        prefix_prod_mssql_backup = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
+        
+        prefix_prod_mssql = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--conf spark.connection.url=\"{print_url}\" \\\n--conf spark.connection.user=\"{print_tuz_rd}\" \\\n--conf spark.connection.password=TODO \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
         if self.env_type == 1:  # Local
-            prefix = prefix_local
+            # prefix = prefix_local
+            if self.db_type == 1:  # Oracle
+                prefix = prefix_local_oracle
+            elif self.db_type == 2:  # MSSQL
+                prefix = prefix_local_mssql
         elif self.env_type == 2:  # Prod
             if self.db_type == 1:  # Oracle
-                prefix = prefix_prod_ora
+                prefix = prefix_prod_oracle
             elif self.db_type == 2:  # MSSQL
                 prefix = prefix_prod_mssql
 
