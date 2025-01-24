@@ -387,11 +387,15 @@ class App:
                 query_prefix = 'select '
                 query_suffix = ' from $schema.$table'
                 query_cast_list = []
+                
+                columns_casts = []
 
                 for _, row in current_df.iterrows():
                     target_column_name = row['CodeT']
                     source_column_name = row['CodeS']
+                    target_column_type = row['DataTypeT']
                     source_column_type = row['DataTypeS']
+                    target_column_length = ''
                     source_column_length = ''
 
                     if row['LengthS'] and\
@@ -399,28 +403,60 @@ class App:
                         source_column_length = f"({row['LengthS']})"
                     else:
                         source_column_length = ''
+                        
+                    if row['LengthT'] and\
+                        row['DataTypeT'].lower() not in self.mssql_dt_wo_length:
+                        target_column_length = f"({row['LengthT']})"
+                    else:
+                        target_column_length = ''
 
-                    query_cast_list.append(
-                        f"cast('[{source_column_name}]' as "
-                        f"{source_column_type}{source_column_length}) as "
-                        f"'[{target_column_name}]'"
+                    if self.flow_type_select == 1:
+                        columns_casts.append(
+                            {
+                                "name": source_column_name,
+                                "colType": f"{target_column_type}{target_column_length}"
+                            }
+                        )
+                    elif self.flow_type_select == 2:
+                        query_cast_list.append(
+                            f"cast('[{source_column_name}]' as "
+                            f"{source_column_type}{source_column_length}) as "
+                            f"'[{target_column_name}]'"
                         )
 
                 query_full = ', '.join(query_cast_list)
 
                 query_full = query_prefix + query_full + query_suffix
-
-                flow_template = {
-                    "loadType": "Scd1Replace",
-                    "source": {
-                        "schema": schema_s,
-                        "table": '['+source_table+']',
-                        "query": query_full
-                    },
-                    "target": {
-                        "table": target_table
+                
+                flow_template = {}
+                
+                if self.flow_type_select == 1:
+                    # columnCasts
+                    flow_template = {
+                        "loadType": "Scd1Replace",
+                        "source": {
+                            "schema": schema_s,
+                            "table": '['+source_table+']',
+                            "columnCasts": columns_casts
+                        },
+                        # "query": query_full,
+                        "target": {
+                            "table": target_table
+                        }
                     }
-                }
+                elif self.flow_type_select == 2:
+                    # Query
+                    flow_template = {
+                        "loadType": "Scd1Replace",
+                        "source": {
+                            "schema": schema_s,
+                            "table": '['+source_table+']',
+                            "query": query_full
+                        },
+                        "target": {
+                            "table": target_table
+                        }
+                    }
 
                 if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
 
@@ -500,21 +536,6 @@ class App:
                 },
                 "flows": test_flow_entity_lst
                 }
-            main_json_template_backup = {
-                "connection": {
-                    "connType": "jdbc",
-                    "url": f"{print_url}",
-                    "driver": "oracle.jdbc.driver.OracleDriver",
-                    "user": f"{print_tuz_rd}",
-                    "password": "###connection.password###"
-                },
-                "commonInfo": {
-                    "targetSchema": schema_t,
-                    "etlSchema": schema_t,
-                    "logsTable": f"{print_logs}"
-                },
-                "flows": test_flow_entity_lst
-                }
         elif self.db_type == 2:
             main_json_template = {
                 "connection": {
@@ -522,21 +543,6 @@ class App:
                     "url": "###connection.url###",
                     "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
                     "user": "###connection.user###",
-                    "password": "###connection.password###"
-                },
-                "commonInfo": {
-                    "targetSchema": schema_t,
-                    "etlSchema": schema_t,
-                    "logsTable": f"{print_logs}"
-                },
-                "flows": test_flow_entity_lst
-                }
-            main_json_template_backup = {
-                "connection": {
-                    "connType": "jdbc",
-                    "url": f"{print_url}",
-                    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                    "user": f"{print_tuz_rd}",
                     "password": "###connection.password###"
                 },
                 "commonInfo": {
@@ -625,12 +631,8 @@ class App:
         
         prefix_local_mssql = f"""spark-submit --name {print_load_name} --conf spark.connection.url=\"{print_url}\" --conf spark.connection.user=\"{print_tuz_rd}\" --conf spark.connection.password=\"{print_local_password}\" --master yarn --conf spark.master=yarn --conf spark.submit.deployMode=cluster --conf spark.yarn.maxAppAttempts=1  --conf spark.sql.broadcastTimeout=600 --conf spark.hadoop.hive.exec.dynamic.partition=true --conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict --conf spark.driver.userClassPathFirst=true --conf spark.executor.userClassPathFirst=true --conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow --conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow --jars /home/hdoop/drivers/mssql-jdbc-9.2.1.jre8.jar --class sparketl.Main /home/hdoop/SparkEtl_v2.jar ' """
 
-        prefix_prod_oracle_backup = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
-        
         prefix_prod_oracle = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--conf spark.connection.url=\"{print_url}\" \\\n--conf spark.connection.user=\"{print_tuz_rd}\" \\\n--conf spark.connection.password=TODO \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/ojdbc8.jar,hdfs:///apps/sparkjars/2239/orai18n.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
-        prefix_prod_mssql_backup = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.connection.password=TODO \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
-        
         prefix_prod_mssql = f"""spark3-submit \\\n--keytab ~/{print_tuz_ld}.keytab \\\n--principal {print_tuz_ld}@REGION.VTB.RU \\\n--name {print_load_name} \\\n--conf spark.connection.url=\"{print_url}\" \\\n--conf spark.connection.user=\"{print_tuz_rd}\" \\\n--conf spark.connection.password=TODO \\\n--master yarn \\\n--conf spark.master=yarn \\\n--conf spark.submit.deployMode=cluster \\\n--conf spark.yarn.maxAppAttempts=1 \\\n--conf spark.dynamicAllocation.enabled=False \\\n--conf spark.driver.memory=3g \\\n--conf spark.executor.memory=2g \\\n--conf spark.executor.cores=4 \\\n--conf spark.executor.instances=6 \\\n--conf spark.executor.memoryOverhead=4g \\\n--conf spark.hadoop.hive.exec.dynamic.partition=True \\\n--conf spark.hadoop.hive.exec.dynamic.partition.mode=nonstrict \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInWrite=LEGACY \\\n--conf spark.sql.legacy.parquet.int96RebaseModeInRead=LEGACY \\\n--conf spark.driver.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--conf spark.executor.extraJavaOptions=-Duser.timezone=Europe/Moscow \\\n--jars hdfs:///apps/sparkjars/2239/mssql-jdbc-9.2.1.jre8.jar \\\n--class sparketl.Main \\\n--deploy-mode cluster hdfs:///apps/sparkjars/2239/SparkEtl.jar \\\n' """
 
         if self.env_type == 1:  # Local
