@@ -45,7 +45,7 @@ class App:
         # CHEATS
         self.custom_schema_s_name = ''
         self.custom_schema_t_name = ''
-        self.table_type_filter = 'TableT'  # TableS TableT
+        self.table_type_filter = 'TableS'  # TableS TableT
         self.code_type_filter = 'CodeS'  # CodeS CodeT
         self.take_only_table_list = []
         self.ignore_table_list = []
@@ -261,35 +261,39 @@ class App:
         schtbl_cnt_trigger = 0
         schtbl_num = 1
 
+        # generate flows
         if self.db_type == 1:  # Oracle
-            # generate oracle flows
-            print('=MAKING ORACLE FLOWS=')
+            print_db_type = 'ORACLE'
+        elif self.db_type == 2:  # MSSQL
+            print_db_type = 'MSSQL'
+        print(f'=MAKING {print_db_type} FLOWS=')
+        
+        for schema_table in schemaS_tableS_lst:
+
+            current_df = self.main_df[
+                self.main_df['schemaS.tableS'] == schema_table
+                ]
+
+            schema_s = current_df.iloc[0]['SchemaS']
+            source_table = current_df.iloc[0]['TableS']
+            target_table = current_df.iloc[0]['TableT']
             
-            for schema_table in schemaS_tableS_lst:
+            query_full = ''
+            query_prefix = 'select '
+            query_suffix = ' from $schema.$table'
+            query_cast_list = []
 
-                current_df = self.main_df[
-                    self.main_df['schemaS.tableS'] == schema_table
-                    ]
+            columns_casts = []
 
-                schema_s = current_df.iloc[0]['SchemaS']
-                source_table = current_df.iloc[0]['TableS']
-                target_table = current_df.iloc[0]['TableT']
+            for _, row in current_df.iterrows():
+                target_column_name = row['CodeT']
+                source_column_name = row['CodeS']
+                target_column_type = row['DataTypeT']
+                source_column_type = row['DataTypeS']
+                target_column_length = ''
+                source_column_length = ''
                 
-                query_full = ''
-                query_prefix = 'select '
-                query_suffix = ' from $schema.$table'
-                query_cast_list = []
-
-                columns_casts = []
-
-                for _, row in current_df.iterrows():
-                    target_column_name = row['CodeT']
-                    source_column_name = row['CodeS']
-                    source_column_type = row['DataTypeS']
-                    target_column_type = row['DataTypeT']
-                    source_column_length = ''
-                    target_column_length = ''
-
+                if self.db_type == 1:  # Oracle
                     if row['LengthS'] and\
                         row['DataTypeS'].lower() not in self.oracle_dt_wo_length:
                         source_column_length = f"({row['LengthS']})"
@@ -303,27 +307,47 @@ class App:
                         target_column_length = f"({row['LengthT']})"
                     else:
                         target_column_length = ''
+                elif self.db_type == 2:  # MSSQL
+                    if row['LengthS'] and\
+                        row['DataTypeS'].lower() not in self.mssql_dt_wo_length:
+                        source_column_length = f"({row['LengthS']})"
+                    else:
+                        source_column_length = ''
+                        
+                    if row['LengthT'] and\
+                        row['DataTypeT'].lower() not in self.mssql_dt_wo_length:
+                        target_column_length = f"({row['LengthT']})"
+                    else:
+                        target_column_length = ''
 
-                    if self.flow_type_select == 1:
-                        columns_casts.append(
-                            {
-                                "name": source_column_name,
-                                "colType": f"{target_column_type}{target_column_length}"
-                            }
-                        )
-                    elif self.flow_type_select == 2:
+                if self.flow_type_select == 1:
+                    columns_casts.append(
+                        {
+                            "name": source_column_name,
+                            "colType": f"{target_column_type}{target_column_length}"
+                        }
+                    )
+                elif self.flow_type_select == 2:
+                    if self.db_type == 1:  # Oracle
                         query_cast_list.append(
                             f"cast('{source_column_name}' as "
                             f"{source_column_type}{source_column_length}) as "
                             f"'{target_column_name}'"
                         )
+                    elif self.db_type == 2:  # MSSQL
+                        query_cast_list.append(
+                            f"cast('[{source_column_name}]' as "
+                            f"{source_column_type}{source_column_length}) as "
+                            f"'[{target_column_name}]'"
+                        )
 
-                query_full = ', '.join(query_cast_list)
+            query_full = ', '.join(query_cast_list)
 
-                query_full = query_prefix + query_full + query_suffix
+            query_full = query_prefix + query_full + query_suffix
 
-                flow_template = {}
+            flow_template = {}
 
+            if self.db_type == 1:  # Oracle
                 if self.flow_type_select == 1:
                     # columnCasts
                     flow_template = {
@@ -334,7 +358,6 @@ class App:
                             "columnCasts": columns_casts,
                             "jdbcDialect": "OracleDialect"
                         },
-                        # "query": query_full,
                         "target": {
                             "table": target_table
                         }
@@ -353,89 +376,7 @@ class App:
                             "table": target_table
                         }
                     }
-                
-                if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
-
-                    schtbl_cnt_trigger += 1
-
-                    test_flow_entity_lst.append(flow_template)
-                
-                else:
-                    
-                    schtbl_cnt_trigger = 0
-
-                    test_flow_entity_lst.append(flow_template)
-
-                    self.print_results(schema_t,
-                                       test_flow_entity_lst,
-                                       schtbl_num,
-                                       self.schtbl_json_max_cnt+1)
-                    
-                    schtbl_num += 1
-
-                    test_flow_entity_lst = []
-
-        elif self.db_type == 2:  # MSSQL
-            # generate mssql flows
-            print('=MAKING MSSQL FLOWS=')
-            
-            for schema_table in schemaS_tableS_lst:
-
-                current_df = self.main_df[
-                    self.main_df['schemaS.tableS'] == schema_table
-                    ]
-
-                schema_s = current_df.iloc[0]['SchemaS']
-                source_table = current_df.iloc[0]['TableS']
-                target_table = current_df.iloc[0]['TableT']
-                
-                query_full = ''
-                query_prefix = 'select '
-                query_suffix = ' from $schema.$table'
-                query_cast_list = []
-                
-                columns_casts = []
-
-                for _, row in current_df.iterrows():
-                    target_column_name = row['CodeT']
-                    source_column_name = row['CodeS']
-                    target_column_type = row['DataTypeT']
-                    source_column_type = row['DataTypeS']
-                    target_column_length = ''
-                    source_column_length = ''
-
-                    if row['LengthS'] and\
-                        row['DataTypeS'].lower() not in self.mssql_dt_wo_length:
-                        source_column_length = f"({row['LengthS']})"
-                    else:
-                        source_column_length = ''
-                        
-                    if row['LengthT'] and\
-                        row['DataTypeT'].lower() not in self.mssql_dt_wo_length:
-                        target_column_length = f"({row['LengthT']})"
-                    else:
-                        target_column_length = ''
-
-                    if self.flow_type_select == 1:
-                        columns_casts.append(
-                            {
-                                "name": source_column_name,
-                                "colType": f"{target_column_type}{target_column_length}"
-                            }
-                        )
-                    elif self.flow_type_select == 2:
-                        query_cast_list.append(
-                            f"cast('[{source_column_name}]' as "
-                            f"{source_column_type}{source_column_length}) as "
-                            f"'[{target_column_name}]'"
-                        )
-
-                query_full = ', '.join(query_cast_list)
-
-                query_full = query_prefix + query_full + query_suffix
-                
-                flow_template = {}
-                
+            elif self.db_type == 2:  # MSSQL
                 if self.flow_type_select == 1:
                     # columnCasts
                     flow_template = {
@@ -445,7 +386,6 @@ class App:
                             "table": '['+source_table+']',
                             "columnCasts": columns_casts
                         },
-                        # "query": query_full,
                         "target": {
                             "table": target_table
                         }
@@ -463,27 +403,27 @@ class App:
                             "table": target_table
                         }
                     }
+            
+            if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
 
-                if schtbl_cnt_trigger < self.schtbl_json_max_cnt:
+                schtbl_cnt_trigger += 1
 
-                    schtbl_cnt_trigger += 1
-
-                    test_flow_entity_lst.append(flow_template)
+                test_flow_entity_lst.append(flow_template)
+            
+            else:
                 
-                else:
-                    
-                    schtbl_cnt_trigger = 0
+                schtbl_cnt_trigger = 0
 
-                    test_flow_entity_lst.append(flow_template)
+                test_flow_entity_lst.append(flow_template)
 
-                    self.print_results(schema_t,
-                                       test_flow_entity_lst,
-                                       schtbl_num,
-                                       self.schtbl_json_max_cnt+1)
-                    
-                    schtbl_num += 1
+                self.print_results(schema_t,
+                                    test_flow_entity_lst,
+                                    schtbl_num,
+                                    self.schtbl_json_max_cnt+1)
+                
+                schtbl_num += 1
 
-                    test_flow_entity_lst = []
+                test_flow_entity_lst = []
 
         # for last part of batch
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num > 1:
@@ -541,39 +481,28 @@ class App:
         else:
             print_logs = 'TODO_LOGS'
 
-        # self.db_type = 1  # 1: Oracle, 2: MSSQL
+        #
+        print_driver = ''
         if self.db_type == 1:
-            main_json_template = {
-                "connection": {
-                    "connType": "jdbc",
-                    "url": "###connection.url###",
-                    "driver": "oracle.jdbc.driver.OracleDriver",
-                    "user": "###connection.user###",
-                    "password": "###connection.password###"
-                },
-                "commonInfo": {
-                    "targetSchema": schema_t,
-                    "etlSchema": schema_t,
-                    "logsTable": f"{print_logs}"
-                },
-                "flows": test_flow_entity_lst
-                }
+            print_driver = 'oracle.jdbc.driver.OracleDriver'
         elif self.db_type == 2:
-            main_json_template = {
-                "connection": {
-                    "connType": "jdbc",
-                    "url": "###connection.url###",
-                    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                    "user": "###connection.user###",
-                    "password": "###connection.password###"
-                },
-                "commonInfo": {
-                    "targetSchema": schema_t,
-                    "etlSchema": schema_t,
-                    "logsTable": f"{print_logs}"
-                },
-                "flows": test_flow_entity_lst
-                }
+            print_driver = 'com.microsoft.sqlserver.jdbc.SQLServerDriver'
+
+        main_json_template = {
+            "connection": {
+                "connType": "jdbc",
+                "url": "###connection.url###",
+                "driver": f"{print_driver}",
+                "user": "###connection.user###",
+                "password": "###connection.password###"
+            },
+            "commonInfo": {
+                "targetSchema": schema_t,
+                "etlSchema": schema_t,
+                "logsTable": f"{print_logs}"
+            },
+            "flows": test_flow_entity_lst
+            }
 
         # define name for json and application
 
