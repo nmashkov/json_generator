@@ -1,6 +1,6 @@
 /maps
 /output
-_connections.txt
+connections.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
