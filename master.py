@@ -24,7 +24,7 @@ class App:
         self.db_type = 1  # 1: Oracle, 2: MSSQL
         self.env_type = 2  # 1: Local, 2: Prod
         self.flow_type_select = 2  # 1: columnCasts, 2: Query
-        self.schtbl_json_max_cnt = 49
+        self.schtbl_json_max_cnt = 25-1
         self.oracle_dt_wo_length = ('smallint', 'date', 'int', 'integer')
         self.mssql_dt_wo_length = ('image', 'ntext', 'int', 'text', 'datetime')
         # CBLOB
@@ -36,6 +36,7 @@ class App:
         # SYSTEM PARAMETERS
         self.system_number = 'test'
         self.zno_number = ''
+        self.postfix_remarque = ''
         self.short_name = 1  # 1: Yes, 2: No
         self.tuz_ld = ''
         self.tuz_rd = ''  # local - user
@@ -45,7 +46,7 @@ class App:
         # CHEATS
         self.custom_schema_s_name = ''
         self.custom_schema_t_name = ''
-        self.table_type_filter = 'TableS'  # TableS TableT
+        self.table_type_filter = 'TableT'  # TableS TableT
         self.code_type_filter = 'CodeS'  # CodeS CodeT
         self.take_only_table_list = []
         self.ignore_table_list = []
@@ -548,6 +549,11 @@ class App:
             print_zno_number = self.zno_number
         else:
             print_zno_number = 'N'
+            
+        if self.postfix_remarque:
+            print_postfix_remarque = '_'+self.postfix_remarque
+        else:
+            print_postfix_remarque = ''
         
         print_load_name = ''
 
@@ -558,6 +564,7 @@ class App:
                 f'load_'
                 f'{str(schtbl_len)}_'
                 f'{str(schtbl_num)}'
+                f'{print_postfix_remarque}'
             )
         else:  # No
             print_load_name = (
@@ -569,6 +576,7 @@ class App:
                 f'{columnCasts_info}'
                 f'{str(schtbl_len)}_'
                 f'{str(schtbl_num)}'
+                f'{print_postfix_remarque}'
             )
         
         # form final json
@@ -644,4 +652,4 @@ class App:
 if __name__ == '__main__':
     app = App()
     app.run()
-    app.pause()
+    # app.pause()
