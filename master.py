@@ -1,12 +1,11 @@
-import os
-from sys import exit
-import pathlib
-
 import json
+import os
+import pathlib
+from sys import exit
+
 import pandas as pd
 
-from connections import oracle_vars_dict, mssql_vars_dict, local_vars_dict
-
+from connections import local_vars_dict, mssql_vars_dict, oracle_vars_dict
 
 BASE_DIR = str(pathlib.Path().resolve())
 TARGET_DIR = ''
@@ -21,7 +20,7 @@ class App:
         self.mapping_filename = ''
         self.main_df = ''
         self.enc = 'utf-8'
-        self.db_type = 1  # 1: Oracle, 2: MSSQL
+        self.db_type = 2  # 1: Oracle, 2: MSSQL
         self.env_type = 2  # 1: Local, 2: Prod
         self.flow_type_select = 2  # 1: columnCasts, 2: Query
         self.schtbl_json_max_cnt = 25-1
@@ -34,9 +33,9 @@ class App:
         # COUNTS
         # self.source_counts_csv = ''
         # SYSTEM PARAMETERS
-        self.system_number = 'test'
-        self.zno_number = ''
-        self.postfix_remarque = ''
+        self.system_number = '1581'
+        self.zno_number = '8'
+        self.postfix_remarque = 't_user_var'
         self.short_name = 1  # 1: Yes, 2: No
         self.tuz_ld = ''
         self.tuz_rd = ''  # local - user
@@ -48,7 +47,7 @@ class App:
         self.custom_schema_t_name = ''
         self.table_type_filter = 'TableT'  # TableS TableT
         self.code_type_filter = 'CodeS'  # CodeS CodeT
-        self.take_only_table_list = []
+        self.take_only_table_list = ['t_user_var']
         self.ignore_table_list = []
         self.ignore_code_list = []
     
@@ -436,7 +435,7 @@ class App:
                                rest_tbl_cnt)
         # if mapping table count less than self.schtbl_json_max_cnt
         if schtbl_cnt_trigger <= schtbl_len and schtbl_num == 1:
-            schtbl_num = '1'
+            schtbl_num = ''
             self.print_results(schema_t,
                                test_flow_entity_lst,
                                schtbl_num,
@@ -556,13 +555,16 @@ class App:
             print_postfix_remarque = ''
         
         print_load_name = ''
+        
+        if schtbl_num:
+            schtbl_num = '_'+schtbl_num
 
         if self.short_name == 1:  # Yes
             print_load_name = (
                 f'{print_system_number}_'
                 f'{print_zno_number}_'
                 f'load_'
-                f'{str(schtbl_len)}_'
+                f'{str(schtbl_len)}'
                 f'{str(schtbl_num)}'
                 f'{print_postfix_remarque}'
             )
